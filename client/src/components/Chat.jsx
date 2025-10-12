@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 function Chat() {
-  const [messages, setMessages] = useState([]); // Para guardar la lista de mensajes
-  const [newMessage, setNewMessage] = useState(''); // Para el texto que el usuario escribe
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
   const [error, setError] = useState('');
 
-  // 1. Usamos useEffect para buscar los mensajes cuando el componente carga
   useEffect(() => {
     const fetchMessages = async () => {
       const token = localStorage.getItem('token');
@@ -22,47 +21,50 @@ function Chat() {
     fetchMessages();
   }, []);
 
-  // 2. Función para manejar el envío de un nuevo mensaje
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (newMessage.trim() === '') return;
-
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post('http://localhost:3001/api/chat/messages', 
+      const response = await axios.post('http://localhost:3001/api/chat/messages',
         { message_content: newMessage },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
-      
-      // Agregamos el nuevo mensaje a la lista actual para una actualización instantánea
-      // ¡OJO! Esta es una versión simple. El backend nos devolvió el mensaje completo, pero
-      // nos falta el "username". Lo solucionaremos después.
+      // Actualización simple para reflejar el cambio.
       setMessages([...messages, { username: 'Tú', message_content: newMessage }]);
-      setNewMessage(''); // Limpiamos el campo de texto
+      setNewMessage('');
     } catch (err) {
       setError('Error al enviar el mensaje.');
     }
   };
 
   return (
-    <div style={{ border: '1px solid black', padding: '10px', marginTop: '20px' }}>
-      <h4>Chat General</h4>
-      <div style={{ height: '200px', overflowY: 'scroll', border: '1px solid #ccc', marginBottom: '10px', padding: '5px' }}>
+    <div className="bg-white p-6 rounded-lg shadow-md">
+      <h4 className="text-xl font-bold mb-4 text-gray-800">Chat General</h4>
+      <div className="h-64 overflow-y-auto border rounded-md p-4 mb-4 bg-gray-50 space-y-2">
         {messages.map((msg, index) => (
-          <p key={index}><strong>{msg.username}:</strong> {msg.message_content}</p>
+          <div key={index}>
+            <span className="font-bold text-blue-600">{msg.username}: </span>
+            <span className="text-gray-700">{msg.message_content}</span>
+          </div>
         ))}
       </div>
-      <form onSubmit={handleSendMessage}>
-        <input 
+      <form onSubmit={handleSendMessage} className="flex gap-2">
+        <input
           type="text"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Escribí tu mensaje..."
-          style={{ width: '80%' }}
+          className="flex-grow shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
         />
-        <button type="submit">Enviar</button>
+        <button
+          type="submit"
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+        >
+          Enviar
+        </button>
       </form>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <p className="text-red-500 text-xs italic mt-2">{error}</p>}
     </div>
   );
 }
