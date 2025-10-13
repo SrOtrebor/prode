@@ -6,11 +6,20 @@ function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false); // Estado para el envío
   const { login } = useAuth();
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError('');
+    setIsSubmitting(true);
+
+    if (!import.meta.env.VITE_API_URL) {
+      setError('Error de configuración: La URL de la API no está definida.');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/login`, {
         email,
@@ -18,7 +27,13 @@ function Login() {
       });
       login(response.data);
     } catch (err) {
-      setError(err.response.data.message);
+      if (err.response && err.response.data && err.response.data.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Error al intentar iniciar sesión. Inténtalo de nuevo.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
@@ -38,6 +53,7 @@ function Login() {
               onChange={(e) => setEmail(e.target.value)}
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               required
+              disabled={isSubmitting}
             />
           </div>
           <div className="mb-6">
@@ -51,15 +67,17 @@ function Login() {
               onChange={(e) => setPassword(e.target.value)}
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
               required
+              disabled={isSubmitting}
             />
           </div>
           {error && <p className="text-red-500 text-xs italic mb-4">{error}</p>}
           <div className="flex items-center justify-between">
             <button
               type="submit"
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full disabled:bg-blue-300"
+              disabled={isSubmitting}
             >
-              Entrar
+              {isSubmitting ? 'Enviando...' : 'Entrar'}
             </button>
           </div>
         </form>
