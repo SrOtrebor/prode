@@ -1,29 +1,42 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import globals from "globals";
+import js from "@eslint/js";
+import reactRecommended from "eslint-plugin-react/configs/recommended.js";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
 
-export default defineConfig([
-  globalIgnores(['dist']),
+export default [
   {
-    files: ['**/*.{js,jsx}'],
-    extends: [
-      js.configs.recommended,
-      reactHooks.configs['recommended-latest'],
-      reactRefresh.configs.vite,
-    ],
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        ecmaFeatures: { jsx: true },
-        sourceType: 'module',
+    ignores: ["dist/**"],
+  },
+  js.configs.recommended,
+  {
+    // Spread the recommended config for React
+    ...reactRecommended,
+    files: ["src/**/*.{js,jsx}"],
+    settings: {
+      react: {
+        version: "detect",
       },
     },
+  },
+  {
+    files: ["src/**/*.{js,jsx}"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+    plugins: {
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+    },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      ...reactHooks.configs.recommended.rules,
+      "react-refresh/only-export-components": "warn",
+      "no-unused-vars": "warn",
+      // Disable a rule from react/recommended that is often too noisy
+      "react/prop-types": "off",
+      "react/react-in-jsx-scope": "off" // Not needed with new JSX transform
     },
   },
-])
+];
