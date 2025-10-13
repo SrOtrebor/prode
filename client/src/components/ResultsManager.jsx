@@ -26,7 +26,7 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
     const fetchMatches = async () => {
       const token = localStorage.getItem('token');
       try {
-        const response = await axios.get(`http://localhost:3001/api/admin/matches/${selectedEvent}`, {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/matches/${selectedEvent}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         setMatches(response.data);
@@ -64,7 +64,7 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
     }));
 
     try {
-        await axios.post('http://localhost:3001/api/admin/results', 
+        await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/results`, 
         { results: resultsToSave },
         { headers: { 'Authorization': `Bearer ${token}` } }
         );
@@ -77,7 +77,7 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
   const handleCalculatePoints = async () => {
     const token = localStorage.getItem('token');
     try {
-        await axios.post(`http://localhost:3001/api/events/${selectedEvent}/calculate`, 
+        await axios.post(`${import.meta.env.VITE_API_URL}/api/events/${selectedEvent}/calculate`, 
         {},
         { headers: { 'Authorization': `Bearer ${token}` } }
         );

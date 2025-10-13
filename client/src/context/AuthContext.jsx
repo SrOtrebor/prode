@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           // Usamos la ruta /api/profile para verificar el token y obtener los datos del usuario
-          const response = await axios.get('http://localhost:3001/api/profile', {
+          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/profile`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           // Si el token es válido, guardamos los datos del usuario
