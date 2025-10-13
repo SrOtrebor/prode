@@ -1,17 +1,18 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const Leaderboard = ({ eventId }) => {
     const [leaderboard, setLeaderboard] = useState([]);
     const [error, setError] = useState('');
-    const { token } = useContext(AuthContext);
+    const { user } = useAuth();
+    const token = user?.token;
 
     useEffect(() => {
         if (eventId && token) {
             const fetchLeaderboard = async () => {
                 try {
-                    const res = await axios.get(`/api/leaderboard/${eventId}`, {
+                    const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/leaderboard/${eventId}`, {
                         headers: {
                             Authorization: `Bearer ${token}`
                         }
