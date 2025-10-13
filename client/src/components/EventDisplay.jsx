@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-function EventDisplay() {
+function EventDisplay({ setEvent }) {
   const [eventData, setEventData] = useState(null);
   const [predictions, setPredictions] = useState({});
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false); // Estado para el proceso de guardado
+  const [feedback, setFeedback] = useState({ message: '', type: '' }); // Estado para mensajes de feedback
 
   useEffect(() => {
     const fetchActiveEvent = async () => {
       const token = localStorage.getItem('token');
       if (!token) return;
       try {
-        const response = await axios.get('http://localhost:3001/api/events/active', {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/events/active`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         setEventData(response.data);
+        setEvent(response.data.event);
         const initialPredictions = {};
         response.data.matches.forEach(match => {
           if (match.user_prediction) {
@@ -31,7 +34,17 @@ function EventDisplay() {
       }
     };
     fetchActiveEvent();
-  }, []);
+  }, [setEvent]);
+
+  // Efecto para limpiar el mensaje de feedback después de 3 segundos
+  useEffect(() => {
+    if (feedback.message) {
+      const timer = setTimeout(() => {
+        setFeedback({ message: '', type: '' });
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedback.message]);
 
   const handlePrediction = (matchId, prediction) => {
     setPredictions(prev => ({ ...prev, [matchId]: { ...prev[matchId], prediction_main: prediction } }));
@@ -43,7 +56,38 @@ function EventDisplay() {
   };
 
   const handleSave = async () => {
-    // ... (La lógica de guardado queda igual)
+    setIsSaving(true);
+    setFeedback({ message: '', type: '' });
+
+    // FILTRAR: Solo incluir predicciones que tengan un valor en prediction_main ('L', 'E', o 'V')
+    const validPredictions = Object.entries(predictions).filter(([, pred]) => pred.prediction_main);
+
+    if (validPredictions.length === 0) {
+      setFeedback({ message: 'No hay pronósticos válidos para guardar (debes elegir L, E o V).', type: 'error' });
+      setIsSaving(false);
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    const payload = {
+      predictions: validPredictions.map(([matchId, pred]) => ({
+        match_id: parseInt(matchId, 10),
+        prediction_main: pred.prediction_main,
+        predicted_score_local: pred.score_local ? parseInt(pred.score_local, 10) : null,
+        predicted_score_visitor: pred.score_visitor ? parseInt(pred.score_visitor, 10) : null,
+      })),
+    };
+
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/predictions`, payload, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setFeedback({ message: '¡Pronósticos guardados con éxito!', type: 'success' });
+    } catch (err) {
+      setFeedback({ message: err.response?.data?.message || 'Error al guardar los pronósticos.', type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const calculateTotalPoints = () => {
@@ -54,7 +98,6 @@ function EventDisplay() {
   if (error) return <div className="bg-red-100 p-4 rounded">{error}</div>;
   if (!eventData) return <p>Cargando evento...</p>;
 
-  // Si el evento está ABIERTO, mostramos la vista para predecir.
   if (eventData.event.status === 'open') {
     return (
       <div className="bg-white p-6 rounded-lg shadow-md">
@@ -97,17 +140,23 @@ function EventDisplay() {
             </div>
           ))}
         </div>
+        {/* CORRECCIÓN DE SINTAXIS EN CLASSNAME */}
         <button
           onClick={handleSave}
-          className="mt-6 w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-300"
+          disabled={isSaving}
+          className={`mt-6 w-full font-bold py-2 px-4 rounded transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 ${isSaving ? 'bg-gray-500' : 'bg-green-500 hover:bg-green-700'} text-white`}
         >
-          Guardar Pronósticos
+          {isSaving ? 'Guardando...' : 'Guardar Pronósticos'}
         </button>
+        {feedback.message && (
+          <div className={`mt-4 text-center font-semibold ${feedback.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+            {feedback.message}
+          </div>
+        )}
       </div>
     );
   }
 
-  // Si el evento está TERMINADO, mostramos la vista de resultados.
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
       <h3 className="text-2xl font-bold mb-2 text-gray-800">{eventData.event.name} - Resultados Finales</h3>

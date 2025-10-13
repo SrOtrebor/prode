@@ -10,7 +10,9 @@ require('dotenv').config();
 
 // 2. Crear una instancia de Express
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'https://prode-app.onrender.com'
+}));
 app.use(express.json());
 const PORT = process.env.PORT || 3001;
 
@@ -149,17 +151,15 @@ app.post('/api/predictions', authMiddleware, async (req, res) => {
   const { predictions } = req.body;
   const userId = req.user.id;
 
-  if (!predictions || Object.keys(predictions).length === 0) {
+  if (!predictions || !Array.isArray(predictions) || predictions.length === 0) {
     return res.status(400).json({ message: 'No se enviaron predicciones.' });
   }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const matchId in predictions) {
-      const { prediction_main, score_local, score_visitor } = predictions[matchId];
-      const finalScoreLocal = score_local === '' ? null : parseInt(score_local);
-      const finalScoreVisitor = score_visitor === '' ? null : parseInt(score_visitor);
+    for (const prediction of predictions) {
+      const { match_id, prediction_main, predicted_score_local, predicted_score_visitor } = prediction;
       const query = `
         INSERT INTO predictions (user_id, match_id, prediction_main, predicted_score_local, predicted_score_visitor)
         VALUES ($1, $2, $3, $4, $5)
@@ -169,12 +169,13 @@ app.post('/api/predictions', authMiddleware, async (req, res) => {
           predicted_score_local = $4, 
           predicted_score_visitor = $5;
       `;
-      await client.query(query, [userId, matchId, prediction_main, finalScoreLocal, finalScoreVisitor]);
+      await client.query(query, [userId, match_id, prediction_main, predicted_score_local, predicted_score_visitor]);
     }
     await client.query('COMMIT');
     res.status(200).json({ message: 'Pronósticos guardados exitosamente.' });
   } catch (error) {
     await client.query('ROLLBACK');
+    console.error('Error al guardar predicciones:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   } finally {
     client.release();

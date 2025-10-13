@@ -19,7 +19,7 @@ function AdminPanel() {
     const fetchEvents = async () => {
       const token = localStorage.getItem('token');
       try {
-        const response = await axios.get('http://localhost:3001/api/admin/events', {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/events`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         setEvents(response.data);
@@ -35,7 +35,7 @@ function AdminPanel() {
     setEventMessage('');
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post('http://localhost:3001/api/admin/events', 
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/events`, 
         { name: eventName, close_date: closeDate },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
@@ -55,7 +55,7 @@ function AdminPanel() {
     try {
       // Usamos el 'selectedEvent' del formulario de agregar partido
       const eventId = document.getElementById('event-select-for-match').value;
-      const response = await axios.post('http://localhost:3001/api/admin/matches', 
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/matches`, 
         { event_id: eventId, local_team: localTeam, visitor_team: visitorTeam, match_date: matchDate },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );

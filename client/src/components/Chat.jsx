@@ -10,7 +10,7 @@ function Chat() {
     const fetchMessages = async () => {
       const token = localStorage.getItem('token');
       try {
-        const response = await axios.get('http://localhost:3001/api/chat/messages', {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/chat/messages`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         setMessages(response.data);
@@ -26,7 +26,7 @@ function Chat() {
     if (newMessage.trim() === '') return;
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post('http://localhost:3001/api/chat/messages',
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/chat/messages`,
         { message_content: newMessage },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
