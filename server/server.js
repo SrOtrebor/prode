@@ -11,7 +11,7 @@ require('dotenv').config();
 // 2. Crear una instancia de Express
 const app = express();
 app.use(cors({
-  origin: 'https://prode-app.onrender.com'
+  origin: 'https://fulbitoplay.onrender.com'
 }));
 app.use(express.json());
 const PORT = process.env.PORT || 3001;
