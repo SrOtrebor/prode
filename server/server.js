@@ -36,6 +36,41 @@ app.get('/', async (req, res) => {
   }
 });
 
+// Ruta para registrar nuevos usuarios
+app.post('/api/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    // 1. Validar que los campos no estén vacíos
+    if (!username || !password) {
+      return res.status(400).json({ message: 'El nombre de usuario y la contraseña son requeridos.' });
+    }
+
+    // 2. Verificar si el usuario ya existe
+    const existingUser = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ message: 'El nombre de usuario ya existe.' });
+    }
+
+    // 3. Hashear la contraseña
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // 4. Insertar el nuevo usuario con rol 'player'
+    await pool.query(
+      "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, 'player')",
+      [username, passwordHash]
+    );
+
+    // 5. Enviar respuesta de éxito
+    res.status(201).json({ message: 'Usuario registrado exitosamente.' });
+
+  } catch (error) {
+    console.error('Error en /api/register:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 // Ruta para registrar usuarios
 app.post('/api/register', async (req, res) => {
   try {
