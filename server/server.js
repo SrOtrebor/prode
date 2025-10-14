@@ -5,7 +5,7 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const authMiddleware = require('./middleware/auth');
-const adminAuthMiddleware = require('./middleware/adminAuth'); // <-- ESTA LÍNEA FALTA
+const adminAuthMiddleware = require('./middleware/adminAuth');
 require('dotenv').config();
 
 // 2. Crear una instancia de Express
@@ -67,28 +67,6 @@ app.post('/api/register', async (req, res) => {
 
   } catch (error) {
     console.error('Error en /api/register:', error);
-    res.status(500).json({ message: 'Error interno del servidor.' });
-  }
-});
-
-// Ruta para registrar usuarios
-app.post('/api/register', async (req, res) => {
-  try {
-    const { email, username, password } = req.body;
-    if (!email || !username || !password) {
-      return res.status(400).json({ message: 'Email, username y password son requeridos.' });
-    }
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(password, saltRounds);
-    const newUser = await pool.query(
-      "INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at",
-      [email, username, passwordHash]
-    );
-    res.status(201).json(newUser.rows[0]);
-  } catch (error) {
-    if (error.code === '23505') {
-      return res.status(409).json({ message: 'El email o el nombre de usuario ya existen.' });
-    }
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
@@ -315,6 +293,37 @@ app.post('/api/chat/messages', authMiddleware, async (req, res) => {
 app.get('/api/admin/test', authMiddleware, adminAuthMiddleware, (req, res) => {
   res.json({ message: '¡Bienvenido, Admin! La ruta de administrador funciona.' });
 });
+
+// RUTA DE ADMIN: Crear un nuevo usuario
+app.post('/api/admin/users', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { username, password, role } = req.body;
+
+    if (!username || !password || !role) {
+      return res.status(400).json({ message: 'El nombre de usuario, la contraseña y el rol son requeridos.' });
+    }
+
+    const existingUser = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ message: 'El nombre de usuario ya existe.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    const newUser = await pool.query(
+      "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, created_at",
+      [username, passwordHash, role]
+    );
+
+    res.status(201).json(newUser.rows[0]);
+
+  } catch (error) {
+    console.error('Error al crear usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 
 // NUEVA RUTA DE ADMIN: Crear un nuevo evento (fecha)
 app.post('/api/admin/events', authMiddleware, adminAuthMiddleware, async (req, res) => {

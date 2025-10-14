@@ -13,6 +13,10 @@ function AdminPanel() {
   const [visitorTeam, setVisitorTeam] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [matchMessage, setMatchMessage] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState('user');
+  const [userMessage, setUserMessage] = useState('');
 
   // useEffect para buscar la lista de eventos UNA SOLA VEZ al cargar
   useEffect(() => {
@@ -29,6 +33,24 @@ function AdminPanel() {
     };
     fetchEvents();
   }, []); // El array vacío [] asegura que se ejecute solo una vez
+
+  const handleUserSubmit = async (e) => {
+    e.preventDefault();
+    setUserMessage('');
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/users`, 
+        { username, password, role },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      setUserMessage(`¡Usuario "${response.data.username}" creado exitosamente!`);
+      setUsername('');
+      setPassword('');
+      setRole('user');
+    } catch (error) {
+      setUserMessage('Error al crear el usuario.');
+    }
+  };
 
   const handleEventSubmit = async (e) => {
     e.preventDefault();
@@ -70,7 +92,30 @@ function AdminPanel() {
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md mt-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Formulario de Crear Usuario */}
+        <form onSubmit={handleUserSubmit} className="space-y-4">
+          <h4 className="text-xl font-semibold border-b pb-2">Crear Usuario</h4>
+          <div>
+            <label className="block text-gray-700">Nombre de Usuario:</label>
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full mt-1 p-2 border rounded" required />
+          </div>
+          <div>
+            <label className="block text-gray-700">Contraseña:</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full mt-1 p-2 border rounded" required />
+          </div>
+          <div>
+            <label className="block text-gray-700">Rol:</label>
+            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full mt-1 p-2 border rounded bg-white">
+              <option value="user">Usuario</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          <button type="submit" className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Crear Usuario
+          </button>
+          {userMessage && <p className="mt-4 text-center">{userMessage}</p>}
+        </form>
         {/* Formulario de Crear Fecha */}
         <form onSubmit={handleEventSubmit} className="space-y-4">
           <h4 className="text-xl font-semibold border-b pb-2">Crear Nueva Fecha</h4>
