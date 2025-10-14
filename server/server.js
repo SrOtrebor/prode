@@ -85,6 +85,7 @@ app.post('/api/login', async (req, res) => {
       }
     );
   } catch (error) {
+    console.error('Error en /api/login:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
