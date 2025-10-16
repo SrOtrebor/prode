@@ -462,20 +462,7 @@ app.post('/api/admin/reset-password', authMiddleware, adminAuthMiddleware, async
   }
 });
 
-// RUTA TEMPORAL Y SECRETA PARA HACER ADMIN AL USUARIO
-app.get('/api/make-me-admin-now-and-delete-this', async (req, res) => {
-  const userEmail = 'admin@fulbitoplay.com';
-  try {
-    const result = await pool.query("UPDATE users SET role = 'admin' WHERE email = $1", [userEmail]);
-    if (result.rowCount > 0) {
-      res.status(200).send(`<h1>HECHO: El usuario ${userEmail} ahora es admin. Por favor, avísale a la IA que elimine esta ruta.</h1>`);
-    } else {
-      res.status(404).send(`<h1>ERROR: No se encontró al usuario ${userEmail}.</h1>`);
-    }
-  } catch (error) {
-    res.status(500).send(`<h1>ERROR de base de datos: ${error.message}</h1>`);
-  }
-});
+
 
 
 // NUEVA RUTA DE ADMIN: Crear un nuevo evento (fecha)
