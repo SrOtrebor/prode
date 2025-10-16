@@ -5,35 +5,31 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // <-- NUEVO: Estado de carga
+  const [loading, setLoading] = useState(true);
 
-  // Este useEffect se ejecuta UNA SOLA VEZ cuando la app carga
-  useEffect(() => {
-    const verifyUser = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          // Usamos la ruta /api/profile para verificar el token y obtener los datos del usuario
-          const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/profile`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          // Si el token es válido, guardamos los datos del usuario
-          setUser({ user: response.data, token });
-        } catch (error) {
-          // Si el token es inválido o expiró, lo borramos
-          localStorage.removeItem('token');
-          setUser(null);
-        }
+  const fetchAndSetUser = async () => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/profile`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setUser({ user: response.data, token });
+      } catch (error) {
+        localStorage.removeItem('token');
+        setUser(null);
       }
-      setLoading(false); // Terminamos de cargar
-    };
-    verifyUser();
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchAndSetUser();
   }, []);
 
-  const login = (userData) => {
+  const login = async (userData) => {
     localStorage.setItem('token', userData.token);
-    // Para que el estado 'user' tenga la misma estructura que en la verificación
-    setUser({ user: { username: 'temp' }, token: userData.token }); // Actualización temporal, la recarga lo corregirá
+    await fetchAndSetUser(); // Reutilizamos la misma lógica para obtener el perfil completo
   };
 
   const logout = () => {
@@ -41,8 +37,14 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // La nueva función para refrescar los datos del usuario
+  const refreshUser = async () => {
+    setLoading(true);
+    await fetchAndSetUser();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
       {!loading && children}
     </AuthContext.Provider>
   );
