@@ -5,13 +5,25 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const authMiddleware = require('./middleware/auth');
-const adminAuthMiddleware = require('./middleware/adminAuth'); // <-- ESTA LÍNEA FALTA
+const adminAuthMiddleware = require('./middleware/adminAuth');
+const crypto = require('crypto');
 require('dotenv').config();
 
-// 2. Crear una instancia de Express
+// --- CONFIGURACIÓN DEL SERVIDOR CON SOCKET.IO ---
 const app = express();
+const http = require('http');
+const server = http.createServer(app);
+const { Server } = require("socket.io");
+const io = new Server(server, {
+  cors: {
+    origin: ['http://localhost:5173', 'https://fulbitoplay.onrender.com'],
+    methods: ["GET", "POST"]
+  }
+});
+
+// 2. Crear una instancia de Express
 app.use(cors({
-  origin: 'https://fulbitoplay.onrender.com'
+  origin: ['https://fulbitoplay.onrender.com', 'http://localhost:5173']
 }));
 app.use(express.json());
 const PORT = process.env.PORT || 3001;
@@ -36,24 +48,37 @@ app.get('/', async (req, res) => {
   }
 });
 
-// Ruta para registrar usuarios
+// Ruta para registrar nuevos usuarios
 app.post('/api/register', async (req, res) => {
   try {
-    const { email, username, password } = req.body;
-    if (!email || !username || !password) {
-      return res.status(400).json({ message: 'Email, username y password son requeridos.' });
+    const { username, password, email } = req.body;
+
+    // 1. Validar que los campos no estén vacíos
+    if (!username || !password || !email) {
+      return res.status(400).json({ message: 'El nombre de usuario, el email y la contraseña son requeridos.' });
     }
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(password, saltRounds);
-    const newUser = await pool.query(
-      "INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at",
-      [email, username, passwordHash]
+
+    // 2. Verificar si el usuario o el email ya existen
+    const existingUser = await pool.query("SELECT * FROM users WHERE username = $1 OR email = $2", [username, email]);
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ message: 'El nombre de usuario o el email ya existe.' });
+    }
+
+    // 3. Hashear la contraseña
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // 4. Insertar el nuevo usuario con rol 'player' y email
+    await pool.query(
+      "INSERT INTO users (username, password_hash, role, email) VALUES ($1, $2, 'player', $3)",
+      [username, passwordHash, email]
     );
-    res.status(201).json(newUser.rows[0]);
+
+    // 5. Enviar respuesta de éxito
+    res.status(201).json({ message: 'Usuario registrado exitosamente.' });
+
   } catch (error) {
-    if (error.code === '23505') {
-      return res.status(409).json({ message: 'El email o el nombre de usuario ya existen.' });
-    }
+    console.error('Error en /api/register:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
@@ -92,8 +117,8 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/profile', authMiddleware, async (req, res) => {
   try {
-    // Añadimos "role" a la consulta SQL
-    const user = await pool.query("SELECT id, username, email, role FROM users WHERE id = $1", [req.user.id]);
+    // La columna puede_apostar_resultado ya no existe, la quitamos de la consulta
+    const user = await pool.query("SELECT id, username, email, role, key_balance FROM users WHERE id = $1", [req.user.id]);
 
     if (user.rows.length === 0) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
@@ -101,20 +126,54 @@ app.get('/api/profile', authMiddleware, async (req, res) => {
 
     res.json(user.rows[0]);
   } catch (error) {
-    console.error(error);
+    console.error('Error en /api/profile:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
-// RUTA ACTUALIZADA: Obtiene el evento activo MÁS RECIENTE o el último finalizado
+// RUTA DE USUARIO: Cambiar el nombre de usuario (solo para VIPs y Admins)
+app.put('/api/profile/change-username', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { newUsername } = req.body;
+
+  if (!newUsername || newUsername.trim().length < 3) {
+    return res.status(400).json({ message: 'El nuevo nombre de usuario debe tener al menos 3 caracteres.' });
+  }
+
+  try {
+    // 1. Obtener el perfil del usuario actual
+    const userResult = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+    const user = userResult.rows[0];
+
+    // 2. Verificar permisos
+    if (user.role !== 'vip' && user.role !== 'admin') {
+      return res.status(403).json({ message: 'No tienes permiso para cambiar tu nombre de usuario.' });
+    }
+
+    // 3. Verificar que el nuevo nombre de usuario no esté en uso
+    const existingUser = await pool.query("SELECT id FROM users WHERE username = $1 AND id != $2", [newUsername, userId]);
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ message: 'Ese nombre de usuario ya está en uso.' });
+    }
+
+    // 4. Actualizar el nombre de usuario
+    await pool.query("UPDATE users SET username = $1 WHERE id = $2", [newUsername, userId]);
+
+    res.status(200).json({ message: '¡Nombre de usuario actualizado exitosamente!' });
+
+  } catch (error) {
+    console.error('Error al cambiar el nombre de usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA ACTUALIZADA: Obtiene el evento activo Y si cada partido está desbloqueado (versión segura)
 app.get('/api/events/active', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // 1. Buscamos el evento 'open' MÁS RECIENTE
     let eventResult = await pool.query("SELECT * FROM events WHERE status = 'open' ORDER BY id DESC LIMIT 1");
 
-    // 2. Si no hay evento 'open', buscamos el último 'finished'
     if (eventResult.rows.length === 0) {
       eventResult = await pool.query("SELECT * FROM events WHERE status = 'finished' ORDER BY close_date DESC LIMIT 1");
     }
@@ -124,7 +183,7 @@ app.get('/api/events/active', authMiddleware, async (req, res) => {
     }
     const event = eventResult.rows[0];
 
-    // 3. Buscamos los partidos y las predicciones del usuario para ese evento (esto no cambia)
+    // 1. Obtener todos los partidos del evento
     const matchesQuery = `
       SELECT 
         m.id, m.local_team, m.visitor_team, m.result_local, m.result_visitor,
@@ -138,12 +197,27 @@ app.get('/api/events/active', authMiddleware, async (req, res) => {
       ORDER BY m.match_date ASC
     `;
     const matchesResult = await pool.query(matchesQuery, [userId, event.id]);
+    const matches = matchesResult.rows;
 
-    res.json({ event: event, matches: matchesResult.rows });
+    // 2. Obtener los IDs de los partidos desbloqueados por el usuario para este evento
+    const matchIds = matches.map(m => m.id);
+    const unlockedResult = await pool.query(
+      'SELECT match_id FROM unlocked_score_bets WHERE user_id = $1 AND match_id = ANY($2::int[])',
+      [userId, matchIds]
+    );
+    const unlockedIds = new Set(unlockedResult.rows.map(r => r.match_id));
+
+    // 3. Unir la información en el código
+    const matchesWithUnlockStatus = matches.map(match => ({
+      ...match,
+      is_unlocked: unlockedIds.has(match.id)
+    }));
+
+    res.json({ event: event, matches: matchesWithUnlockStatus });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error interno del servidor.' });
+    console.error('Error detallado en /api/events/active:', error);
+    res.status(500).json({ message: 'Error interno del servidor al cargar el evento.' });
   }
 });
 
@@ -158,6 +232,25 @@ app.post('/api/predictions', authMiddleware, async (req, res) => {
 
   const client = await pool.connect();
   try {
+    // --- NUEVA VALIDACIÓN DE FECHA LÍMITE ---
+    const firstMatchId = predictions[0].match_id;
+    const eventResult = await client.query(
+      'SELECT e.id, e.close_date FROM events e JOIN matches m ON e.id = m.event_id WHERE m.id = $1',
+      [firstMatchId]
+    );
+
+    if (eventResult.rows.length === 0) {
+      client.release();
+      return res.status(404).json({ message: 'El evento asociado a estas predicciones no fue encontrado.' });
+    }
+
+    const eventCloseDate = eventResult.rows[0].close_date;
+    if (new Date() > new Date(eventCloseDate)) {
+      client.release();
+      return res.status(403).json({ message: 'El tiempo para enviar o modificar pronósticos para este evento ha finalizado.' });
+    }
+    // --- FIN DE LA VALIDACIÓN ---
+
     await client.query('BEGIN');
     for (const prediction of predictions) {
       const { match_id, prediction_main, predicted_score_local, predicted_score_visitor } = prediction;
@@ -179,13 +272,15 @@ app.post('/api/predictions', authMiddleware, async (req, res) => {
     console.error('Error al guardar predicciones:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   } finally {
-    client.release();
+    // Asegurarse de que el cliente se libere solo si no se ha hecho ya
+    if (!client.isReleased) {
+      client.release();
+    }
   }
 });
 
-// NUEVA RUTA PROTEGIDA: Finalizar un evento y calcular los puntos
-app.post('/api/events/:eventId/calculate', authMiddleware, async (req, res) => {
-  // Por ahora, cualquiera puede llamarlo. Más adelante, lo restringiremos a admins.
+// RUTA DE ADMIN ACTUALIZADA Y SEGURA: Finalizar un evento y calcular los puntos
+app.post('/api/events/:eventId/calculate', authMiddleware, adminAuthMiddleware, async (req, res) => {
   const { eventId } = req.params;
 
   const client = await pool.connect();
@@ -207,18 +302,23 @@ app.post('/api/events/:eventId/calculate', authMiddleware, async (req, res) => {
       const matchResult = realResults[pred.match_id];
       let points = 0;
 
-      // Determinamos el resultado real (L, E, V)
-      let realOutcome = 'E';
-      if (matchResult.local > matchResult.visitor) realOutcome = 'L';
-      if (matchResult.visitor > matchResult.local) realOutcome = 'V';
+      // Si el resultado del partido no ha sido cargado, los puntos son 0
+      if (matchResult.local === null || matchResult.visitor === null) {
+        points = 0;
+      } else {
+        // Determinamos el resultado real (L, E, V)
+        let realOutcome = 'E';
+        if (matchResult.local > matchResult.visitor) realOutcome = 'L';
+        if (matchResult.visitor > matchResult.local) realOutcome = 'V';
 
-      // Comparamos L/E/V -> 1 punto
-      if (pred.prediction_main === realOutcome) {
-        points += 1;
-        
-        // Si acertó L/E/V, revisamos si acertó el resultado exacto -> 3 puntos extra
-        if (pred.predicted_score_local === matchResult.local && pred.predicted_score_visitor === matchResult.visitor) {
-          points += 3;
+        // Comparamos L/E/V -> 1 punto
+        if (pred.prediction_main === realOutcome) {
+          points += 1;
+          
+          // Si acertó L/E/V, revisamos si acertó el resultado exacto -> 2 puntos extra
+          if (pred.predicted_score_local === matchResult.local && pred.predicted_score_visitor === matchResult.visitor) {
+            points += 2; // <-- CAMBIO APLICADO
+          }
         }
       }
       
@@ -245,7 +345,7 @@ app.post('/api/events/:eventId/calculate', authMiddleware, async (req, res) => {
 app.get('/api/chat/messages', authMiddleware, async (req, res) => {
     try {
       const messagesResult = await pool.query(`
-        SELECT cm.id, cm.message_content, cm.created_at, u.username 
+        SELECT cm.id, cm.message_content, cm.created_at, u.username, u.role 
         FROM chat_messages cm
         JOIN users u ON cm.user_id = u.id
         ORDER BY cm.created_at DESC
@@ -258,6 +358,13 @@ app.get('/api/chat/messages', authMiddleware, async (req, res) => {
     }
 });
 
+io.on('connection', (socket) => {
+  console.log('a user connected');
+  socket.on('disconnect', () => {
+    console.log('user disconnected');
+  });
+});
+
 // Ruta protegida para enviar un nuevo mensaje al chat
 app.post('/api/chat/messages', authMiddleware, async (req, res) => {
     try {
@@ -267,10 +374,23 @@ app.post('/api/chat/messages', authMiddleware, async (req, res) => {
         return res.status(400).json({ message: 'El contenido del mensaje no puede estar vacío.' });
       }
       const newMessageResult = await pool.query(
-        "INSERT INTO chat_messages (user_id, message_content) VALUES ($1, $2) RETURNING *",
+        "INSERT INTO chat_messages (user_id, message_content) VALUES ($1, $2) RETURNING id, created_at, message_content",
         [userId, message_content]
       );
-      res.status(201).json(newMessageResult.rows[0]);
+
+      const userResult = await pool.query("SELECT username, role FROM users WHERE id = $1", [userId]);
+      const { username, role } = userResult.rows[0];
+
+      const finalMessage = {
+        ...newMessageResult.rows[0],
+        username: username,
+        role: role // <-- Añadir rol al payload
+      };
+
+      // Emitir el nuevo mensaje a todos los clientes conectados
+      io.emit('new_message', finalMessage);
+
+      res.status(201).json(finalMessage);
     } catch (error) {
       res.status(500).json({ message: 'Error interno del servidor.' });
     }
@@ -280,6 +400,68 @@ app.post('/api/chat/messages', authMiddleware, async (req, res) => {
 app.get('/api/admin/test', authMiddleware, adminAuthMiddleware, (req, res) => {
   res.json({ message: '¡Bienvenido, Admin! La ruta de administrador funciona.' });
 });
+
+// RUTA DE ADMIN: Crear un nuevo usuario
+app.post('/api/admin/users', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { username, password, role } = req.body;
+
+    if (!username || !password || !role) {
+      return res.status(400).json({ message: 'El nombre de usuario, la contraseña y el rol son requeridos.' });
+    }
+
+    const existingUser = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ message: 'El nombre de usuario ya existe.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    const newUser = await pool.query(
+      "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, created_at",
+      [username, passwordHash, role]
+    );
+
+    res.status(201).json(newUser.rows[0]);
+
+  } catch (error) {
+    console.error('Error al crear usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA DE ADMIN: Resetear la contraseña de un usuario
+app.post('/api/admin/reset-password', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  const { email, newPassword } = req.body;
+
+  if (!email || !newPassword) {
+    return res.status(400).json({ message: 'El email y la nueva contraseña son requeridos.' });
+  }
+
+  try {
+    // Hashear la nueva contraseña
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    // Actualizar la contraseña en la base de datos
+    const result = await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE email = $2',
+      [passwordHash, email]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado con ese email.' });
+    }
+
+    res.status(200).json({ message: 'La contraseña ha sido reseteada exitosamente.' });
+
+  } catch (error) {
+    console.error('Error al resetear la contraseña:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 
 // NUEVA RUTA DE ADMIN: Crear un nuevo evento (fecha)
 app.post('/api/admin/events', authMiddleware, adminAuthMiddleware, async (req, res) => {
@@ -376,7 +558,160 @@ app.post('/api/admin/results', authMiddleware, adminAuthMiddleware, async (req, 
   }
 });
 
+// RUTA DE ADMIN: Generar una nueva llave de activación (con cantidad)
+app.post('/api/admin/generate-key', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  const { quantity } = req.body; // Se recibe una cantidad opcional
+  const keyQuantity = quantity > 0 ? quantity : 1; // Por defecto es 1 si no se especifica
+
+  try {
+    const newKey = crypto.randomBytes(8).toString('hex');
+
+    const result = await pool.query(
+      "INSERT INTO activation_keys (key_code, status, quantity) VALUES ($1, 'available', $2) RETURNING *",
+      [newKey, keyQuantity]
+    );
+
+    res.status(201).json(result.rows[0]);
+
+  } catch (error) {
+    if (error.code === '23505') { 
+      return res.status(500).json({ message: 'Error al generar la llave, por favor inténtalo de nuevo.' });
+    }
+    console.error('Error al generar la llave:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA DE USUARIO: Canjear un código para añadir llaves al saldo
+app.post('/api/keys/redeem', authMiddleware, async (req, res) => {
+  const { keyCode } = req.body;
+  const userId = req.user.id;
+
+  if (!keyCode) {
+    return res.status(400).json({ message: 'Debes proporcionar un código de llave.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const keyResult = await client.query(
+      "SELECT id, quantity FROM activation_keys WHERE key_code = $1 AND status = 'available' FOR UPDATE",
+      [keyCode]
+    );
+
+    if (keyResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(404).json({ message: 'La llave es inválida o ya ha sido utilizada.' });
+    }
+    
+    const key = keyResult.rows[0];
+    const keyQuantity = key.quantity;
+
+    // Añadir la cantidad de llaves al saldo del usuario
+    await client.query(
+      "UPDATE users SET key_balance = key_balance + $1 WHERE id = $2",
+      [keyQuantity, userId]
+    );
+
+    // Marcar la llave como usada
+    await client.query(
+      "UPDATE activation_keys SET status = 'used', used_by_user_id = $1, used_at = NOW() WHERE id = $2",
+      [userId, key.id]
+    );
+
+    await client.query('COMMIT');
+    res.status(200).json({ message: `¡Éxito! Has añadido ${keyQuantity} llave(s) a tu cuenta.` });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error al canjear la llave:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  } finally {
+    if (!client.isReleased) {
+      client.release();
+    }
+  }
+});
+
+// RUTA DE USUARIO: Gastar una llave para desbloquear la apuesta de resultado en un partido específico
+app.post('/api/matches/:matchId/unlock-score-bet', authMiddleware, async (req, res) => {
+  const { matchId } = req.params;
+  const userId = req.user.id;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Obtener el perfil del usuario y bloquear la fila para la transacción
+    const userResult = await client.query("SELECT key_balance FROM users WHERE id = $1 FOR UPDATE", [userId]);
+    const user = userResult.rows[0];
+
+    // Verificar que el usuario tenga llaves
+    if (user.key_balance <= 0) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(400).json({ message: 'No tienes llaves suficientes.' });
+    }
+
+    // Verificar que el usuario no haya desbloqueado ya este partido
+    const existingUnlock = await client.query("SELECT id FROM unlocked_score_bets WHERE user_id = $1 AND match_id = $2", [userId, matchId]);
+    if (existingUnlock.rows.length > 0) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.status(400).json({ message: 'Ya has desbloqueado este partido.' });
+    }
+
+    // 1. Restar una llave del saldo
+    await client.query("UPDATE users SET key_balance = key_balance - 1 WHERE id = $1", [userId]);
+
+    // 2. Registrar el desbloqueo en la nueva tabla
+    await client.query("INSERT INTO unlocked_score_bets (user_id, match_id) VALUES ($1, $2)", [userId, matchId]);
+
+    await client.query('COMMIT');
+    res.status(200).json({ message: '¡Apuesta de resultado desbloqueada para este partido!' });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error al desbloquear el partido:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  } finally {
+    if (!client.isReleased) {
+      client.release();
+    }
+  }
+});
+
+// NUEVA RUTA: Obtener la tabla de posiciones para un evento
+app.get('/api/leaderboard/:eventId', authMiddleware, async (req, res) => {
+  const { eventId } = req.params;
+
+  try {
+    const query = `
+      SELECT 
+        u.username,
+        u.role,
+        SUM(p.points_obtained) AS total_points
+      FROM predictions p
+      JOIN users u ON p.user_id = u.id
+      JOIN matches m ON p.match_id = m.id
+      WHERE m.event_id = $1
+      GROUP BY u.username, u.role
+      ORDER BY total_points DESC;
+    `;
+    const leaderboardData = await pool.query(query, [eventId]);
+
+    res.json(leaderboardData.rows);
+
+  } catch (error) {
+    console.error(`Error al obtener leaderboard para el evento ${eventId}:`, error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+
 // 5. Iniciar el servidor (SIEMPRE AL FINAL)
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });

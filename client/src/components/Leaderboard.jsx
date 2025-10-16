@@ -8,6 +8,18 @@ const Leaderboard = ({ eventId }) => {
     const { user } = useAuth();
     const token = user?.token;
 
+    // Función para obtener el ícono según el rol
+    const getRoleIcon = (role) => {
+      switch (role) {
+        case 'admin':
+          return '👑';
+        case 'vip':
+          return '⭐';
+        default:
+          return null;
+      }
+    };
+
     useEffect(() => {
         if (eventId && token) {
             const fetchLeaderboard = async () => {
@@ -58,7 +70,10 @@ const Leaderboard = ({ eventId }) => {
                         {leaderboard.map((player, index) => (
                             <tr key={player.username} className="border-b border-gray-700 hover:bg-gray-800">
                                 <td className="py-2 px-4 font-bold">{index + 1}</td>
-                                <td className="py-2 px-4">{player.username}</td>
+                                <td className="py-2 px-4">
+                                    {getRoleIcon(player.role) && <span className="mr-2">{getRoleIcon(player.role)}</span>}
+                                    {player.username}
+                                </td>
                                 <td className="py-2 px-4 text-right font-semibold">{player.total_points}</td>
                             </tr>
                         ))}
