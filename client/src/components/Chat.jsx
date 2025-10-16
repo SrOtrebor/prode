@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import Picker from 'emoji-picker-react';
 
-function Chat() {
+function Chat({ isFullScreen = false }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showPicker, setShowPicker] = useState(false);
@@ -78,16 +78,22 @@ function Chat() {
         return { className: 'text-texto-principal', icon: '' };
     }
   };
+  
+  const containerClasses = isFullScreen 
+    ? "p-4 flex flex-col h-screen bg-fondo-principal"
+    : "bg-tarjeta p-5 rounded-lg shadow-lg flex flex-col h-full";
 
   return (
-    <div className="bg-tarjeta p-5 rounded-lg shadow-lg flex flex-col h-full">
+    <div className={containerClasses}>
       <div className="flex justify-between items-center mb-4">
         <h4 className="font-display text-xl font-bold text-texto-principal uppercase tracking-wider">Chat General</h4>
-        <Link to="/chat-completo" target="_blank" rel="noopener noreferrer" title="Abrir chat en nueva pestaña" className="text-texto-secundario hover:text-secundario transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </Link>
+        {!isFullScreen && (
+          <Link to="/chat-completo" target="_blank" rel="noopener noreferrer" title="Abrir chat en nueva pestaña" className="text-texto-secundario hover:text-secundario transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </Link>
+        )}
       </div>
       <div ref={chatBodyRef} className="flex-grow overflow-y-auto bg-fondo-principal rounded-lg p-4 space-y-4 text-sm">
         {messages.map((msg, index) => {
