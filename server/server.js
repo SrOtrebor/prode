@@ -404,29 +404,69 @@ app.get('/api/admin/test', authMiddleware, adminAuthMiddleware, (req, res) => {
 // RUTA DE ADMIN: Crear un nuevo usuario
 app.post('/api/admin/users', authMiddleware, adminAuthMiddleware, async (req, res) => {
   try {
-    const { username, password, role } = req.body;
+    const { username, password, email, role } = req.body;
 
-    if (!username || !password || !role) {
-      return res.status(400).json({ message: 'El nombre de usuario, la contraseña y el rol son requeridos.' });
+    if (!username || !password || !role || !email) {
+      return res.status(400).json({ message: 'El email, nombre de usuario, la contraseña y el rol son requeridos.' });
     }
 
-    const existingUser = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+    const existingUser = await pool.query("SELECT * FROM users WHERE username = $1 OR email = $2", [username, email]);
     if (existingUser.rows.length > 0) {
-      return res.status(409).json({ message: 'El nombre de usuario ya existe.' });
+      return res.status(409).json({ message: 'El nombre de usuario o email ya existe.' });
     }
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
     const newUser = await pool.query(
-      "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, created_at",
-      [username, passwordHash, role]
+      "INSERT INTO users (username, password_hash, role, email) VALUES ($1, $2, $3, $4) RETURNING id, username, role, email, created_at",
+      [username, passwordHash, role, email]
     );
 
     res.status(201).json(newUser.rows[0]);
 
   } catch (error) {
     console.error('Error al crear usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA DE ADMIN: Obtener todos los usuarios
+app.get('/api/admin/users', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const users = await pool.query("SELECT id, username, role FROM users ORDER BY id ASC");
+    res.json(users.rows);
+  } catch (error) {
+    console.error('Error al obtener usuarios:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA DE ADMIN: Actualizar el rol de un usuario
+app.put('/api/admin/users/:userId/role', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { role } = req.body;
+
+    // Validar que el rol sea uno de los permitidos
+    const validRoles = ['player', 'vip', 'admin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: 'Rol inválido.' });
+    }
+
+    const result = await pool.query(
+      "UPDATE users SET role = $1 WHERE id = $2 RETURNING id, username, role",
+      [role, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    res.status(200).json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error al actualizar el rol del usuario:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
@@ -677,6 +717,58 @@ app.post('/api/matches/:matchId/unlock-score-bet', authMiddleware, async (req, r
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error al desbloquear el partido:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  } finally {
+    if (!client.isReleased) {
+      client.release();
+    }
+  }
+});
+
+// RUTA DE USUARIO: Gastar una llave para un beneficio
+app.post('/api/keys/spend', authMiddleware, async (req, res) => {
+  const { benefit } = req.body;
+  const userId = req.user.id;
+
+  if (!benefit) {
+    return res.status(400).json({ message: 'No se especificó ningún beneficio.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Obtener el perfil del usuario y bloquear la fila para la transacción
+    const userResult = await client.query("SELECT role, key_balance FROM users WHERE id = $1 FOR UPDATE", [userId]);
+    const user = userResult.rows[0];
+
+    switch (benefit) {
+      case 'become_vip':
+        // Verificar que el usuario sea 'player' y tenga suficientes llaves
+        if (user.role !== 'player') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'Ya eres VIP o tienes un rol superior.' });
+        }
+        if (user.key_balance < 1) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'No tienes llaves suficientes.' });
+        }
+
+        // Actualizar el rol y restar una llave
+        await client.query("UPDATE users SET role = 'vip', key_balance = key_balance - 1 WHERE id = $1", [userId]);
+        
+        await client.query('COMMIT');
+        res.status(200).json({ message: '¡Felicidades! Ahora eres un usuario VIP.' });
+        break;
+
+      default:
+        await client.query('ROLLBACK');
+        res.status(400).json({ message: 'El beneficio solicitado no es válido.' });
+    }
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error al gastar la llave:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   } finally {
     if (!client.isReleased) {

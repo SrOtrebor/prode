@@ -113,45 +113,56 @@ function EventDisplay({ setEvent }) {
     }
   };
 
-  if (error) return <div className="bg-red-900 bg-opacity-50 text-red-300 p-4 rounded-lg">{error}</div>;
-  if (!eventData) return <p className="text-gray-400">Cargando evento...</p>;
+  if (error) return <div className="bg-primario/20 text-primario p-4 rounded-lg">{error}</div>;
+  if (!eventData) return <div className="bg-tarjeta p-5 rounded-lg shadow-lg text-center"><p className="text-texto-secundario">Cargando evento...</p></div>;
+
+  const PredictionButton = ({ matchId, predictionType, currentPrediction }) => {
+    const isSelected = currentPrediction === predictionType;
+    return (
+      <button 
+        onClick={() => handlePrediction(matchId, predictionType)} 
+        className={`py-2 px-4 rounded-md font-display font-bold uppercase text-sm transition-all ${isSelected ? 'bg-primario text-white shadow-lg' : 'bg-fondo-principal text-texto-secundario hover:bg-tarjeta hover:text-texto-principal'}`}>
+        {predictionType}
+      </button>
+    );
+  };
 
   if (eventData.event.status === 'open') {
     return (
-      <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-2xl">
-        <h3 className="text-2xl font-bold mb-4 text-white">{eventData.event.name}</h3>
+      <div className="bg-tarjeta p-5 rounded-lg shadow-lg">
+        <h3 className="font-display text-xl font-bold mb-4 text-center text-texto-principal uppercase tracking-wider">{eventData.event.name}</h3>
         <div className="space-y-4">
           {eventData.matches.map(match => (
-            <div key={match.id} className="p-4 bg-gray-900 rounded-lg">
-              <p className="font-semibold text-white">{match.local_team} vs {match.visitor_team}</p>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center mt-2 gap-4">
-                <div className="flex items-center rounded-md overflow-hidden border border-gray-600">
-                  {['L', 'E', 'V'].map(p => (
-                    <button key={p} onClick={() => handlePrediction(match.id, p)} className={`px-4 py-1 border-r border-gray-600 last:border-r-0 transition-colors duration-200 ${predictions[match.id]?.prediction_main === p ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}>
-                      {p}
-                    </button>
-                  ))}
+            <div key={match.id} className="p-4 bg-fondo-principal rounded-lg">
+              <p className="font-display font-bold text-lg text-texto-principal text-center mb-3">{match.local_team} vs {match.visitor_team}</p>
+              <div className="flex flex-col sm:flex-row items-center justify-between mt-2 gap-4">
+                <div className="flex items-center justify-center gap-2 sm:gap-4">
+                  <PredictionButton matchId={match.id} predictionType="L" currentPrediction={predictions[match.id]?.prediction_main} />
+                  <PredictionButton matchId={match.id} predictionType="E" currentPrediction={predictions[match.id]?.prediction_main} />
+                  <PredictionButton matchId={match.id} predictionType="V" currentPrediction={predictions[match.id]?.prediction_main} />
                 </div>
                 
-                {unlockedMatches.has(match.id) ? (
-                  <div className="flex items-center gap-2 animate-fade-in">
-                    <input type="text" pattern="[0-9]*" value={predictions[match.id]?.score_local || ''} onChange={(e) => handleScoreChange(match.id, 'score_local', e.target.value)} className="w-12 text-center bg-gray-700 border border-gray-600 rounded py-1" />
-                    <span className="font-bold">-</span>
-                    <input type="text" pattern="[0-9]*" value={predictions[match.id]?.score_visitor || ''} onChange={(e) => handleScoreChange(match.id, 'score_visitor', e.target.value)} className="w-12 text-center bg-gray-700 border border-gray-600 rounded py-1" />
-                  </div>
-                ) : (
-                  <button onClick={() => handleUnlockMatch(match.id)} disabled={profile.key_balance < 1} className="px-3 py-1 text-xs font-semibold bg-purple-600 hover:bg-purple-700 rounded-md transition disabled:bg-gray-500 disabled:cursor-not-allowed">
-                    Activar Resultado (1 Llave)
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {unlockedMatches.has(match.id) ? (
+                    <div className="flex items-center gap-2">
+                      <input type="text" pattern="[0-9]*" value={predictions[match.id]?.score_local || ''} onChange={(e) => handleScoreChange(match.id, 'score_local', e.target.value)} className="w-14 text-center bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors" placeholder="L" />
+                      <span className="font-bold text-texto-secundario">-</span>
+                      <input type="text" pattern="[0-9]*" value={predictions[match.id]?.score_visitor || ''} onChange={(e) => handleScoreChange(match.id, 'score_visitor', e.target.value)} className="w-14 text-center bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors" placeholder="V" />
+                    </div>
+                  ) : (
+                    <button onClick={() => handleUnlockMatch(match.id)} disabled={profile.key_balance < 1} className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-xs bg-secundario text-black" >
+                      Resultado Exacto (1 Llave)
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
         </div>
-        <button onClick={handleSave} disabled={isSaving} className={`mt-6 w-full font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${isSaving ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-700'} text-white`}>
+        <button onClick={handleSave} disabled={isSaving} className={`px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed mt-6 w-full text-lg ${isSaving ? 'bg-gray-600' : 'bg-confirmacion'}`}>
           {isSaving ? 'Guardando...' : 'Guardar Pronósticos'}
         </button>
-        {feedback.message && <div className={`mt-4 text-center font-semibold ${feedback.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{feedback.message}</div>}
+        {feedback.message && <div className={`mt-4 text-center font-semibold ${feedback.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{feedback.message}</div>}
       </div>
     );
   }

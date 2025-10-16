@@ -88,35 +88,39 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
   };
 
   return (
-    <div className="space-y-4">
-      <h4 className="text-xl font-semibold border-b pb-2">Cargar Resultados y Finalizar Fecha</h4>
+    <div className="space-y-6">
+      <h4 className="text-xl font-semibold border-b pb-2 border-gray-600 text-white">Cargar Resultados y Finalizar Fecha</h4>
       <div>
-        <label className="block text-gray-700">Seleccionar Fecha a Finalizar:</label>
-        <select value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)} className="w-full mt-1 p-2 border rounded bg-white">
-          {events.map(event => (
-            <option key={event.id} value={event.id}>{event.name}</option>
-          ))}
+        <label htmlFor="event-results-select" className="block text-sm font-medium text-gray-300 mb-1">Seleccionar Fecha a Finalizar:</label>
+        <select id="event-results-select" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)} className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          {events.length > 0 ? (
+            events.map(event => (
+              <option key={event.id} value={event.id}>{event.name}</option>
+            ))
+          ) : (
+            <option disabled>No hay eventos para gestionar.</option>
+          )}
         </select>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         {matches.map(match => (
-          <div key={match.id} className="flex items-center justify-between p-2 border rounded">
-            <span>{match.local_team} vs {match.visitor_team}</span>
+          <div key={match.id} className="flex flex-col sm:flex-row items-center justify-between bg-gray-900 p-3 rounded-md">
+            <span className="text-gray-300 mb-2 sm:mb-0">{match.local_team} vs {match.visitor_team}</span>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 pattern="[0-9]*"
                 onChange={(e) => handleResultChange(match.id, 'result_local', e.target.value)}
-                className="w-12 text-center border rounded py-1"
+                className="w-16 text-center bg-gray-700 border border-gray-600 rounded-md py-1 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="L"
               />
-              <span>-</span>
+              <span className="text-gray-400">-</span>
               <input
                 type="text"
                 pattern="[0-9]*"
                 onChange={(e) => handleResultChange(match.id, 'result_visitor', e.target.value)}
-                className="w-12 text-center border rounded py-1"
+                className="w-16 text-center bg-gray-700 border border-gray-600 rounded-md py-1 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="V"
               />
             </div>
@@ -124,15 +128,17 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
         ))}
       </div>
 
-      <div className="flex gap-4">
-        <button onClick={handleSaveResults} className="w-full bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
-          Guardar Resultados
-        </button>
-        <button onClick={handleCalculatePoints} className="w-full bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
-          Finalizar y Calcular Puntos
-        </button>
-      </div>
-      {message && <p className="mt-4 text-center">{message}</p>}
+      {matches.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-4 pt-4">
+          <button onClick={handleSaveResults} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">
+            Guardar Resultados
+          </button>
+          <button onClick={handleCalculatePoints} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">
+            Finalizar y Calcular Puntos
+          </button>
+        </div>
+      )}
+      {message && <p className="mt-4 text-center text-green-400 font-semibold">{message}</p>}
     </div>
   );
 }
