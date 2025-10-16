@@ -6,6 +6,7 @@ const Register = () => {
   const [formData, setFormData] = useState({
     username: '',
     password: '',
+    email: '' // Añadido
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -43,6 +44,23 @@ const Register = () => {
       <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-lg">
         <h1 className="text-3xl font-bold text-center">Crear una Cuenta</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label
+              htmlFor="email"
+              className="text-sm font-medium text-gray-400"
+            >
+              Correo Electrónico
+            </label>
+            <input
+              type="email"
+              name="email"
+              id="email"
+              required
+              className="w-full px-3 py-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={formData.email}
+              onChange={handleChange}
+            />
+          </div>
           <div>
             <label
               htmlFor="username"
