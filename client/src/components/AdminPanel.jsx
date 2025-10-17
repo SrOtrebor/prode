@@ -9,7 +9,7 @@ const adminSelectStyle = `${adminInputStyle}`;
 const adminButtonStyle = "px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50";
 
 // --- Componentes Reutilizables ---
-const FormInput = ({ id, label, type, value, onChange, required = true }) => (
+const FormInput = ({ id, label, type, value, onChange, required = true, min }) => (
   <div>
     <label htmlFor={id} className="block text-sm font-bold text-texto-secundario mb-1">{label}</label>
     <input
@@ -19,9 +19,21 @@ const FormInput = ({ id, label, type, value, onChange, required = true }) => (
       onChange={onChange}
       className={adminInputStyle}
       required={required}
+      min={min}
     />
   </div>
 );
+
+// Helper function to get current datetime in YYYY-MM-DDTHH:mm format
+const getCurrentDateTimeLocal = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
 
 // --- Sub-componentes del Panel ---
 
@@ -32,6 +44,14 @@ const EventCreator = ({ onEventCreated }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const currentDateTime = new Date();
+    const selectedDateTime = new Date(closeDate);
+
+    if (selectedDateTime < currentDateTime) {
+      setMessage({ type: 'error', text: 'La fecha límite no puede ser en el pasado.' });
+      return;
+    }
+
     const token = localStorage.getItem('token');
     try {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/events`, { name: eventName, close_date: closeDate }, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -47,7 +67,7 @@ const EventCreator = ({ onEventCreated }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <FormInput id="eventName" label="Nombre del Evento" type="text" value={eventName} onChange={(e) => setEventName(e.target.value)} />
-      <FormInput id="closeDate" label="Fecha Límite" type="datetime-local" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} />
+      <FormInput id="closeDate" label="Fecha Límite" type="datetime-local" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} min={getCurrentDateTimeLocal()} />
       <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Crear Evento</button>
       {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </form>
@@ -102,11 +122,13 @@ const KeyGenerator = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [copied, setCopied] = useState(false);
 
   const handleGenerateKey = async () => {
     setLoading(true);
     setError('');
     setNewKey(null);
+    setCopied(false);
     const token = localStorage.getItem('token');
     try {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/generate-key`, { quantity: parseInt(quantity, 10) }, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -117,6 +139,13 @@ const KeyGenerator = () => {
     setLoading(false);
   };
 
+  const handleCopy = () => {
+    if (!newKey) return;
+    navigator.clipboard.writeText(newKey.key_code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000); // Reset after 2 seconds
+  };
+
   return (
     <div className="space-y-4">
       <FormInput id="quantity" label="Cantidad de Llaves en el Código" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
@@ -125,8 +154,12 @@ const KeyGenerator = () => {
       {newKey && (
         <div className="mt-4 p-4 bg-fondo-principal rounded-lg">
           <p className="text-texto-secundario">Código Generado (vale por {newKey.quantity} llaves):</p>
-          <p className="text-confirmacion font-mono text-lg break-all">{newKey.key_code}</p>
-          <p className="text-xs text-texto-secundario mt-2">(Cópialo y compártelo con el usuario)</p>
+          <div className="flex items-center gap-4 mt-2">
+            <p className="text-confirmacion font-mono text-lg break-all flex-grow">{newKey.key_code}</p>
+            <button onClick={handleCopy} className={`${adminButtonStyle} ${copied ? 'bg-confirmacion' : 'bg-primario'} text-sm`}>
+              {copied ? '¡Copiado!' : 'Copiar'}
+            </button>
+          </div>
         </div>
       )}
     </div>

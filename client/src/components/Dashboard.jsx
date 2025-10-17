@@ -162,7 +162,7 @@ function Dashboard() {
                 <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-1">
                   <p className="text-texto-secundario">{profile.email}</p>
                   <RoleTag role={profile.role} />
-                  <span className="px-2 py-1 text-xs font-bold rounded-full bg-tarjeta text-secundario">Llaves: {profile.key_balance}</span>
+                  <span className="flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full bg-tarjeta text-secundario">🔑 Llaves: {profile.key_balance}</span>
                 </div>
               </div>
             </div>

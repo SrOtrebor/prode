@@ -20,7 +20,10 @@ function Chat({ isFullScreen = false }) {
 
   useEffect(() => {
     if (chatBodyRef.current) {
-      chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+      // Ensure scroll happens after DOM updates
+      requestAnimationFrame(() => {
+        chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+      });
     }
   }, [messages]);
 
