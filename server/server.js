@@ -742,9 +742,12 @@ app.post('/api/admin/events', authMiddleware, adminAuthMiddleware, async (req, r
       return res.status(400).json({ message: 'El nombre y la fecha de cierre son requeridos.' });
     }
 
+    // Interpretar el datetime como UTC-3 (Argentina)
+    const close_date_art = `${close_date}:00-03:00`;
+
     const newEvent = await pool.query(
       "INSERT INTO events (name, status, close_date) VALUES ($1, 'open', $2) RETURNING *",
-      [name, close_date]
+      [name, close_date_art]
     );
 
     res.status(201).json(newEvent.rows[0]);
@@ -774,9 +777,12 @@ app.post('/api/admin/matches', authMiddleware, adminAuthMiddleware, async (req, 
       return res.status(400).json({ message: 'Todos los campos son requeridos.' });
     }
 
+    // Interpretar el datetime como UTC-3 (Argentina)
+    const match_datetime_art = `${match_datetime}:00-03:00`;
+
     const newMatch = await pool.query(
       "INSERT INTO matches (event_id, local_team, visitor_team, match_datetime) VALUES ($1, $2, $3, $4) RETURNING *",
-      [event_id, local_team, visitor_team, match_datetime]
+      [event_id, local_team, visitor_team, match_datetime_art]
     );
 
     res.status(201).json(newMatch.rows[0]);
