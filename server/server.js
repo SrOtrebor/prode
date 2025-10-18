@@ -994,6 +994,18 @@ app.post('/api/matches/:matchId/unlock-score-bet', authMiddleware, async (req, r
     const userResult = await client.query("SELECT key_balance FROM users WHERE id = $1 FOR UPDATE", [userId]);
     const user = userResult.rows[0];
 
+    // Verificar que el partido no haya comenzado o el evento no haya finalizado
+    const matchResult = await client.query('SELECT m.match_datetime, e.status FROM matches m JOIN events e ON m.event_id = e.id WHERE m.id = $1', [matchId]);
+    if (matchResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'El partido no existe.' });
+    }
+    const match = matchResult.rows[0];
+    if (new Date(match.match_datetime) <= new Date() || match.status === 'finished') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ message: 'No puedes desbloquear un partido que ya ha comenzado o finalizado.' });
+    }
+
     // Verificar que el usuario tenga llaves
     if (user.key_balance <= 0) {
       await client.query('ROLLBACK');
@@ -1050,6 +1062,13 @@ app.post('/api/keys/spend', authMiddleware, async (req, res) => {
         if (!eventId) {
           await client.query('ROLLBACK');
           return res.status(400).json({ message: 'Se requiere el ID del evento para volverse VIP.' });
+        }
+
+        // Chequear si el evento ya finalizó
+        const eventResult = await client.query('SELECT status FROM events WHERE id = $1', [eventId]);
+        if (eventResult.rows.length === 0 || eventResult.rows[0].status === 'finished') {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'No puedes hacerte VIP de un evento que ya ha finalizado.' });
         }
 
         if (user.key_balance < 1) {
