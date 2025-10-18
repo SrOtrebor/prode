@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 const formatDateTime = (isoString) => {
   if (!isoString) return 'Fecha no definida';
   const date = new Date(isoString);
-  return date.toLocaleString('es-AR', {
+  const formattedDate = date.toLocaleString('es-AR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -14,6 +14,7 @@ const formatDateTime = (isoString) => {
     hour12: false,
     timeZone: 'America/Argentina/Buenos_Aires'
   }).replace(',', ' - ');
+  return `${formattedDate} hs`;
 };
 
 // --- Componente Refactorizado ---
