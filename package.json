@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.14",
+    "emoji-picker-react": "^4.14.1",
+    "vite": "^7.1.10"
+  }
+}

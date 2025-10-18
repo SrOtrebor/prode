@@ -115,6 +115,25 @@ function EventDisplay({ setEvent }) {
     setPredictions(prev => ({ ...prev, [matchId]: { ...prev[matchId], [team]: sanitizedValue } }));
   };
 
+  const handleUnlockScore = async (matchId) => {
+    const token = localStorage.getItem('token');
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/matches/${matchId}/unlock-score-bet`, {}, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      // Refresh event data to show the unlocked score inputs
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/events/${selectedEventId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = response.data;
+      setEventData(data);
+      setEvent(data.event);
+      setIsVipForEvent(data.is_vip_for_event);
+    } catch (error) {
+      setFeedback({ message: error.response?.data?.message || 'Error al desbloquear la apuesta.', type: 'error' });
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setFeedback({ message: '', type: '' });
@@ -250,15 +269,21 @@ function EventDisplay({ setEvent }) {
                       <PredictionButton matchId={match.id} predictionType="V" currentPrediction={predictions[match.id]?.prediction_main} isDisabled={isMatchStarted} />
                     </div>
                     <div className="flex items-center gap-2">
-                      {isVipForEvent ? (
+                      {match.is_unlocked ? (
                         <div className="flex items-center gap-2">
                           <input type="text" pattern="[0-9]*" value={predictions[match.id]?.score_local || ''} onChange={(e) => handleScoreChange(match.id, 'score_local', e.target.value)} className="w-14 text-center bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors" placeholder="L" disabled={isMatchStarted} />
                           <span className="font-bold text-texto-secundario">-</span>
                           <input type="text" pattern="[0-9]*" value={predictions[match.id]?.score_visitor || ''} onChange={(e) => handleScoreChange(match.id, 'score_visitor', e.target.value)} className="w-14 text-center bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors" placeholder="V" disabled={isMatchStarted} />
                         </div>
+                      ) : isVipForEvent ? (
+                        <div className="text-center text-xs text-texto-secundario/70 p-2 rounded-md bg-black/20">
+                          <button onClick={() => handleUnlockScore(match.id)} className="bg-secundario text-black font-bold py-1 px-2 rounded-md text-sm transition-all hover:brightness-110 disabled:opacity-50" disabled={profile.key_balance < 1}>
+                            Desbloquear Resultado Exacto (1 Llave)
+                          </button>
+                        </div>
                       ) : (
                         <div className="text-center text-xs text-texto-secundario/70 p-2 rounded-md bg-black/20">
-                          <p>Hazte VIP para predecir el resultado exacto.</p>
+                          <p>Hazte VIP para habilitar esta opción.</p>
                         </div>
                       )}
                     </div>

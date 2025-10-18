@@ -75,7 +75,7 @@ const BenefitUpgrader = ({ profile, activeEvent }) => {
     setLoading(false);
   };
 
-  if (!profile || profile.role === 'admin') {
+  if (!profile) {
     return null;
   }
 
@@ -159,7 +159,7 @@ function Dashboard() {
   const [activeEvent, setActiveEvent] = useState(null);
   const [currentLeaderboardData, setCurrentLeaderboardData] = useState(null);
 
-  const showRedeemer = profile && profile.role !== 'admin';
+  const showRedeemer = profile;
 
   const RoleTag = ({ profile }) => {
     if (!profile?.role) return null;

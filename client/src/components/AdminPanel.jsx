@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import ResultsManager from './ResultsManager';
-import EventManager from './EventManager'; // <-- IMPORTADO
-
+import EventManager from './EventManager';
+import { useAuth } from '../context/AuthContext';
 import ChatManager from './ChatManager';
 import Prizes from './Prizes';
 
-// --- Estilos Base para Componentes del Panel ---
 const adminTitleStyle = "font-display text-xl font-bold mb-4 text-center text-texto-principal uppercase tracking-wider";
 const adminInputStyle = "w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors";
-const adminSelectStyle = `${adminInputStyle}`;
+const adminSelectStyle = "w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors";
 const adminButtonStyle = "px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50";
 
-// --- Componentes Reutilizables ---
 const FormInput = ({ id, label, type, value, onChange, required = true, min }) => (
   <div>
     <label htmlFor={id} className="block text-sm font-bold text-texto-secundario mb-1">{label}</label>
@@ -28,7 +26,6 @@ const FormInput = ({ id, label, type, value, onChange, required = true, min }) =
   </div>
 );
 
-// Helper function to get current datetime in YYYY-MM-DDTHH:mm format
 const getCurrentDateTimeLocal = () => {
   const now = new Date();
   const year = now.getFullYear();
@@ -38,8 +35,6 @@ const getCurrentDateTimeLocal = () => {
   const minutes = now.getMinutes().toString().padStart(2, '0');
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
-
-// --- Sub-componentes del Panel ---
 
 const EventCreator = ({ onEventCreated }) => {
   const [eventName, setEventName] = useState('');
@@ -72,7 +67,7 @@ const EventCreator = ({ onEventCreated }) => {
     <form onSubmit={handleSubmit} className="space-y-4">
       <FormInput id="eventName" label="Nombre del Evento" type="text" value={eventName} onChange={(e) => setEventName(e.target.value)} />
       <FormInput id="closeDate" label="Fecha Límite" type="datetime-local" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} min={getCurrentDateTimeLocal()} />
-      <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Crear Evento</button>
+      <button type="submit" className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full bg-primario">Crear Evento</button>
       {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </form>
   );
@@ -131,7 +126,7 @@ const MatchManager = ({ events }) => {
         onChange={(e) => setMatchDatetime(e.target.value)}
         required={true} 
       />
-      <button type="submit" className={`${adminButtonStyle} w-full bg-confirmacion`}>Agregar Partido</button>
+      <button type="submit" className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full bg-confirmacion">Agregar Partido</button>
       {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </form>
   );
@@ -169,14 +164,14 @@ const KeyGenerator = () => {
   return (
     <div className="space-y-4">
       <FormInput id="quantity" label="Cantidad de Llaves en el Código" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-      <button onClick={handleGenerateKey} disabled={loading} className={`${adminButtonStyle} w-full bg-secundario text-black`}>{loading ? 'Generando...' : 'Generar Código'}</button>
+      <button onClick={handleGenerateKey} disabled={loading} className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full bg-secundario text-black">{loading ? 'Generando...' : 'Generar Código'}</button>
       {error && <p className="mt-4 text-primario">{error}</p>}
       {newKey && (
         <div className="mt-4 p-4 bg-fondo-principal rounded-lg">
           <p className="text-texto-secundario">Código Generado (vale por {newKey.quantity} llaves):</p>
           <div className="flex items-center gap-4 mt-2">
             <p className="text-confirmacion font-mono text-lg break-all flex-grow">{newKey.key_code}</p>
-            <button onClick={handleCopy} className={`${adminButtonStyle} ${copied ? 'bg-confirmacion' : 'bg-primario'} text-sm`}>
+            <button onClick={handleCopy} className={`px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 ${copied ? 'bg-confirmacion' : 'bg-primario'} text-sm`}>
               {copied ? '¡Copiado!' : 'Copiar'}
             </button>
           </div>
@@ -186,7 +181,7 @@ const KeyGenerator = () => {
   );
 };
 
-const UserManager = () => {
+const UserManager = ({ profile }) => {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -222,7 +217,7 @@ const UserManager = () => {
       setCreateMessage({ type: 'success', text: `¡Usuario "${username}" creado!` });
       fetchUsers();
       setUsername(''); setPassword(''); setEmail(''); setRole('player');
-      setShowCreateForm(false); // Ocultar formulario después de crear
+      setShowCreateForm(false);
     } catch (error) {
       setCreateMessage({ type: 'error', text: error.response?.data?.message || 'Error al crear el usuario.' });
     }
@@ -292,8 +287,7 @@ const UserManager = () => {
       <div className="border-b border-texto-secundario/20 pb-6">
         <button 
             onClick={() => setShowCreateForm(!showCreateForm)}
-            className={`${adminButtonStyle} w-full ${showCreateForm ? 'bg-primario' : 'bg-confirmacion'}`}
-        >
+            className={`px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full ${showCreateForm ? 'bg-primario' : 'bg-confirmacion'}`}>
             {showCreateForm ? 'Cancelar Creación' : 'Crear Nuevo Usuario'}
         </button>
 
@@ -309,7 +303,7 @@ const UserManager = () => {
                   <option value="admin">Admin</option>
                 </select>
               </div>
-              <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Confirmar Creación</button>
+              <button type="submit" className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full bg-primario">Confirmar Creación</button>
               {createMessage.text && <p className={`mt-2 text-center text-sm ${createMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{createMessage.text}</p>}
             </form>
         )}
@@ -328,43 +322,48 @@ const UserManager = () => {
         </div>
         {listMessage.text && <p className={`mb-4 text-center text-sm ${listMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{listMessage.text}</p>}
         {loading ? <p>Cargando usuarios...</p> : (
-          <ul className="space-y-3">
+          <ul className="space-y-4">
             {filteredUsers.map(user => (
-              <li key={user.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-fondo-principal p-3 rounded-md gap-2">
-                <div className="flex-grow">
-                    <div>
-                        <span className="font-medium text-texto-principal">{user.username}</span>
-                        <span className="ml-2 text-xs text-texto-secundario">({user.email})</span>
-                    </div>
-                    <div>
-                        <span className={`ml-2 text-xs font-bold ${user.is_active ? 'text-confirmacion' : 'text-primario'}`}>
-                            {user.is_active ? 'Activo' : 'Inactivo'}
+              <li key={user.id} className="bg-fondo-principal p-4 rounded-lg shadow-md">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                  <div className="md:col-span-2">
+                    <p className="font-bold text-texto-principal text-lg">{user.username}</p>
+                    <p className="text-sm text-texto-secundario">{user.email}</p>
+                    <div className="flex items-center mt-2">
+                      <span className={`px-2 py-1 text-xs font-bold rounded-full ${user.is_active ? 'bg-confirmacion text-white' : 'bg-primario text-white'}`}>
+                        {user.is_active ? 'Activo' : 'Inactivo'}
+                      </span>
+                      {user.is_muted && (
+                        <span className="ml-2 px-2 py-1 text-xs font-bold rounded-full bg-yellow-500 text-black">
+                          Silenciado
                         </span>
-                        {user.is_muted && (
-                            <span className="ml-2 text-xs font-bold text-yellow-500">
-                                (Silenciado)
-                            </span>
-                        )}
+                      )}
+                      <span className="ml-2 px-2 py-1 text-xs font-bold rounded-full bg-gray-600 text-white">
+                        {user.role}
+                      </span>
                     </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-                  <select value={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value)} className={`${adminSelectStyle} text-sm py-1`}>
-                    <option value="player">Player</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                  {user.id !== 1 && user.role !== 'admin' && (
-                    <>
-                      <button onClick={() => handleToggleStatus(user.id, user.is_active)} className={`${user.is_active ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-confirmacion hover:bg-green-600'} text-white font-bold py-1 px-3 rounded-md text-sm transition-all`}>
-                        {user.is_active ? 'Desactivar' : 'Activar'}
-                      </button>
-                       <button onClick={() => handleToggleMute(user.id, user.is_muted)} className={`${user.is_muted ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-600 hover:bg-gray-700'} text-white font-bold py-1 px-3 rounded-md text-sm transition-all`}>
-                        {user.is_muted ? 'Reactivar' : 'Silenciar'}
-                      </button>
-                      <button onClick={() => handleDeleteUser(user.id)} className="bg-primario hover:brightness-110 text-white font-bold py-1 px-3 rounded-md text-sm transition-all">
-                        Eliminar
-                      </button>
-                    </>
-                  )}
+                  </div>
+                  <div className="flex flex-col gap-2 md:items-end">
+                    {profile && profile.role === 'admin' && user.id !== profile.id && (
+                      <select value={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value)} className={`${adminSelectStyle} text-sm py-1`}>
+                        <option value="player">Player</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    )}
+                    {user.role !== 'admin' && (
+                      <div className="flex gap-2">
+                        <button onClick={() => handleToggleStatus(user.id, user.is_active)} className={`text-white font-bold py-1 px-3 rounded-md text-sm transition-all ${user.is_active ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-confirmacion hover:bg-green-600'}`}>
+                          {user.is_active ? 'Desactivar' : 'Activar'}
+                        </button>
+                        <button onClick={() => handleToggleMute(user.id, user.is_muted)} className={`text-white font-bold py-1 px-3 rounded-md text-sm transition-all ${user.is_muted ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-600 hover:bg-gray-700'}`}>
+                          {user.is_muted ? 'Reactivar' : 'Silenciar'}
+                        </button>
+                        <button onClick={() => handleDeleteUser(user.id)} className="bg-primario hover:brightness-110 text-white font-bold py-1 px-3 rounded-md text-sm transition-all">
+                          Eliminar
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </li>
             ))}
@@ -385,9 +384,14 @@ const PasswordResetter = () => {
     if (!window.confirm(`¿Estás seguro de que quieres resetear la contraseña para ${email}?`)) return;
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/reset-password`, { email, newPassword }, { headers: { 'Authorization': `Bearer ${token}` } });
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/admin/reset-password`,
+        { email, newPassword },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
       setMessage({ type: 'success', text: response.data.message });
-      setEmail(''); setNewPassword('');
+      setEmail('');
+      setNewPassword('');
     } catch (error) {
       setMessage({ type: 'error', text: error.response?.data?.message || 'Error al resetear la contraseña.' });
     }
@@ -395,10 +399,28 @@ const PasswordResetter = () => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <FormInput id="reset-email" label="Email del Usuario" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <FormInput id="new-password" label="Nueva Contraseña" type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-      <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Resetear Contraseña</button>
-      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
+      <FormInput
+        id="reset-email"
+        label="Email del Usuario"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <FormInput
+        id="new-password"
+        label="Nueva Contraseña"
+        type="text"
+        value={newPassword}
+        onChange={(e) => setNewPassword(e.target.value)}
+      />
+      <button type="submit" className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full bg-primario">
+        Resetear Contraseña
+      </button>
+      {message.text && (
+        <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>
+          {message.text}
+        </p>
+      )}
     </form>
   );
 };
@@ -406,8 +428,10 @@ const PasswordResetter = () => {
 
 // COMPONENTE PRINCIPAL
 function AdminPanel({ onLeaderboardUpdate }) {
+  const { user: authInfo } = useAuth();
+  const profile = authInfo?.user;
   const [events, setEvents] = useState([]);
-  const [activeTab, setActiveTab] = useState('manageEvents'); // <-- PESTAÑA INICIAL CAMBIADA
+  const [activeTab, setActiveTab] = useState('manageEvents');
 
   const fetchEvents = async () => {
     const token = localStorage.getItem('token');
@@ -426,7 +450,6 @@ function AdminPanel({ onLeaderboardUpdate }) {
     setActiveTab('matches');
   };
 
-  // <-- NUEVA FUNCIÓN PARA BORRAR EVENTOS -->
   const handleDeleteEvent = async (eventId) => {
     if (!window.confirm('¿Estás seguro de que quieres eliminar este evento? Se borrarán todos sus partidos y predicciones. Esta acción es irreversible.')) {
         return;
@@ -436,10 +459,9 @@ function AdminPanel({ onLeaderboardUpdate }) {
         await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/events/${eventId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        fetchEvents(); // Recargar eventos para actualizar la UI
+        fetchEvents();
     } catch (error) {
         console.error("Error al eliminar el evento", error);
-        // Aquí se podría mostrar un mensaje de error al usuario
     }
   };
 
@@ -450,7 +472,7 @@ function AdminPanel({ onLeaderboardUpdate }) {
       case 'matches': return <MatchManager events={events} />;
       case 'results': return <ResultsManager events={events} onLeaderboardUpdate={onLeaderboardUpdate} />;
       case 'keys': return <KeyGenerator />;
-      case 'users': return <UserManager />;
+      case 'users': return <UserManager profile={profile} />;
       case 'chat': return <ChatManager />;
       case 'premios': return <Prizes />;
       case 'resetPassword': return <PasswordResetter />;
@@ -467,7 +489,6 @@ function AdminPanel({ onLeaderboardUpdate }) {
   return (
     <div className="bg-tarjeta p-5 rounded-lg shadow-lg mt-6">
       <h3 className={adminTitleStyle}>Panel de Administrador</h3>
-      {/* <-- PESTAÑAS ACTUALIZADAS --> */}
       <div className="flex flex-wrap justify-center border-b border-texto-secundario/20 mb-6">
         <TabButton tabName="manageEvents">Gestionar Eventos</TabButton>
         <TabButton tabName="createEvent">Crear Evento</TabButton>

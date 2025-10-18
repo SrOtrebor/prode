@@ -30,8 +30,7 @@ async function runMigration(scriptPath) {
 async function runAllMigrations() {
   try {
     console.log('Iniciando la ejecución de todas las migraciones...');
-    await runMigration(path.join(__dirname, 'migrate_db_11.js'));
-    await runMigration(path.join(__dirname, 'migrate_db_12.js'));
+    await runMigration(path.join(__dirname, 'migrate_db_final.js'));
     console.log('Todas las migraciones se ejecutaron con éxito.');
   } catch (error) {
     console.error('Una o más migraciones fallaron. Deteniendo el proceso.');

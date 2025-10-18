@@ -1,6 +1,21 @@
 
-require('dotenv').config();
-const pool = require('./db');
+require('dotenv').config({ path: './server/.env' });
+const { Pool } = require('pg');
+const url = require('url');
+
+const params = url.parse(process.env.DATABASE_URL);
+const auth = params.auth.split(':');
+
+const config = {
+  user: auth[0],
+  password: auth[1],
+  host: params.hostname,
+  port: params.port,
+  database: params.pathname.split('/')[1],
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+};
+
+const pool = new Pool(config);
 
 async function migrateDatabase() {
   console.log('Iniciando migración de la base de datos...');

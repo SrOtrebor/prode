@@ -1,6 +1,7 @@
 -- PostgreSQL final schema for fulbitoplay (v2, corrected order)
 
 -- Drop tables in reverse order of dependency to avoid errors
+DROP TABLE IF EXISTS vip_statuses;
 DROP TABLE IF EXISTS unlocked_score_bets;
 DROP TABLE IF EXISTS predictions;
 DROP TABLE IF EXISTS matches;
@@ -18,7 +19,9 @@ CREATE TABLE public.users (
     password_hash character varying(255) NOT NULL,
     role character varying(20) DEFAULT 'player'::character varying NOT NULL,
     key_balance integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    is_active boolean DEFAULT false NOT NULL,
+    is_muted boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE public.chat_messages (
@@ -49,7 +52,7 @@ CREATE TABLE public.matches (
     event_id integer REFERENCES public.events(id) ON DELETE CASCADE,
     local_team character varying(100) NOT NULL,
     visitor_team character varying(100) NOT NULL,
-    match_date timestamp with time zone NOT NULL,
+    match_datetime timestamp with time zone NOT NULL,
     result_local integer,
     result_visitor integer
 );
@@ -71,4 +74,11 @@ CREATE TABLE public.unlocked_score_bets (
     match_id integer NOT NULL REFERENCES public.matches(id) ON DELETE CASCADE,
     created_at timestamp with time zone DEFAULT now(),
     UNIQUE(user_id, match_id)
+);
+
+CREATE TABLE public.vip_statuses (
+    user_id integer NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    event_id integer NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+    created_at timestamp with time zone DEFAULT now(),
+    PRIMARY KEY (user_id, event_id)
 );

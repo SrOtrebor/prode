@@ -69,9 +69,9 @@ app.post('/api/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // 4. Insertar el nuevo usuario con rol 'player' y email
+    // 4. Insertar el nuevo usuario con rol 'player', email y estado inactivo
     await pool.query(
-      "INSERT INTO users (username, password_hash, role, email) VALUES ($1, $2, 'player', $3)",
+      "INSERT INTO users (username, password_hash, role, email, is_active) VALUES ($1, $2, 'player', $3, false)",
       [username, passwordHash, email]
     );
 
@@ -536,9 +536,11 @@ app.post('/api/admin/users', authMiddleware, adminAuthMiddleware, async (req, re
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
+    const isActive = role === 'admin';
+
     const newUser = await pool.query(
-      "INSERT INTO users (username, password_hash, role, email) VALUES ($1, $2, $3, $4) RETURNING id, username, role, email, created_at",
-      [username, passwordHash, role, email]
+      "INSERT INTO users (username, password_hash, role, email, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, role, email, created_at, is_active",
+      [username, passwordHash, role, email, isActive]
     );
 
     res.status(201).json(newUser.rows[0]);
