@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './components/Dashboard';
+import ChatFullScreen from './components/ChatFullScreen';
 import { useAuth } from './context/AuthContext';
 
 // Componente para proteger rutas
@@ -30,6 +31,14 @@ function App() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/chat-completo"
+        element={
+          <ProtectedRoute>
+            <ChatFullScreen />
           </ProtectedRoute>
         }
       />

@@ -6,7 +6,7 @@ const Register = () => {
   const [formData, setFormData] = useState({
     username: '',
     password: '',
-    email: '' // Añadido
+    email: ''
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -40,76 +40,70 @@ const Register = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
-      <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-lg">
-        <h1 className="text-3xl font-bold text-center">Crear una Cuenta</h1>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label
-              htmlFor="email"
-              className="text-sm font-medium text-gray-400"
-            >
-              Correo Electrónico
-            </label>
-            <input
-              type="email"
-              name="email"
-              id="email"
-              required
-              className="w-full px-3 py-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.email}
-              onChange={handleChange}
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="username"
-              className="text-sm font-medium text-gray-400"
-            >
-              Nombre de usuario
-            </label>
-            <input
-              type="text"
-              name="username"
-              id="username"
-              required
-              className="w-full px-3 py-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.username}
-              onChange={handleChange}
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="password"
-              className="text-sm font-medium text-gray-400"
-            >
-              Contraseña
-            </label>
-            <input
-              type="password"
-              name="password"
-              id="password"
-              required
-              className="w-full px-3 py-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.password}
-              onChange={handleChange}
-            />
-          </div>
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-4 py-2 font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-500"
-            >
-              {loading ? 'Registrando...' : 'Registrarse'}
-            </button>
-          </div>
-        </form>
-        {error && <p className="mt-4 text-center text-red-400">{error}</p>}
-        {success && <p className="mt-4 text-center text-green-400">{success}</p>}
-        <p className="mt-6 text-center text-gray-400">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-tarjeta p-8 rounded-lg shadow-lg text-center">
+          <img src="/logo.png" alt="Fulbito Play Logo" className="h-24 mx-auto mb-6" />
+          <h1 className="font-display text-3xl font-bold text-center uppercase tracking-wider text-texto-principal">Crear una Cuenta</h1>
+          <form onSubmit={handleSubmit} className="space-y-6 mt-6 text-left">
+            <div>
+              <label htmlFor="email" className="block text-sm font-bold text-texto-secundario mb-1">
+                Correo Electrónico
+              </label>
+              <input
+                type="email"
+                name="email"
+                id="email"
+                required
+                className="w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors"
+                value={formData.email}
+                onChange={handleChange}
+              />
+            </div>
+            <div>
+              <label htmlFor="username" className="block text-sm font-bold text-texto-secundario mb-1">
+                Nombre de usuario
+              </label>
+              <input
+                type="text"
+                name="username"
+                id="username"
+                required
+                className="w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors"
+                value={formData.username}
+                onChange={handleChange}
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-bold text-texto-secundario mb-1">
+                Contraseña
+              </label>
+              <input
+                type="password"
+                name="password"
+                id="password"
+                required
+                className="w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors"
+                value={formData.password}
+                onChange={handleChange}
+              />
+            </div>
+            {error && <p className="text-primario text-center text-sm">{error}</p>}
+            {success && <p className="text-confirmacion text-center text-sm">{success}</p>}
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full px-4 py-3 font-bold text-white uppercase transition-all bg-primario rounded-md hover:brightness-110 disabled:opacity-50"
+              >
+                {loading ? 'Registrando...' : 'Registrarse'}
+              </button>
+            </div>
+          </form>
+        </div>
+        <p className="mt-6 text-center text-texto-secundario">
           ¿Ya tienes una cuenta?{' '}
-          <Link to="/login" className="font-medium text-blue-400 hover:underline">
+          <Link to="/login" className="font-bold text-secundario hover:brightness-110">
             Inicia sesión aquí
           </Link>
         </p>

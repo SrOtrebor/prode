@@ -1,21 +1,45 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import ResultsManager from './ResultsManager';
+import EventManager from './EventManager'; // <-- IMPORTADO
 
-// COMPONENTES REUTILIZABLES Y SUB-COMPONENTES
+import ChatManager from './ChatManager';
+import Prizes from './Prizes';
 
-const FormInput = ({ id, label, type, value, onChange, required = true }) => (
+// --- Estilos Base para Componentes del Panel ---
+const adminTitleStyle = "font-display text-xl font-bold mb-4 text-center text-texto-principal uppercase tracking-wider";
+const adminInputStyle = "w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors";
+const adminSelectStyle = `${adminInputStyle}`;
+const adminButtonStyle = "px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50";
+
+// --- Componentes Reutilizables ---
+const FormInput = ({ id, label, type, value, onChange, required = true, min }) => (
   <div>
-    <label htmlFor={id} className="block text-sm font-medium text-gray-300 mb-1">{label}</label>
+    <label htmlFor={id} className="block text-sm font-bold text-texto-secundario mb-1">{label}</label>
     <input
       id={id}
       type={type}
       value={value}
       onChange={onChange}
-      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+      className={adminInputStyle}
       required={required}
+      min={min}
     />
   </div>
 );
+
+// Helper function to get current datetime in YYYY-MM-DDTHH:mm format
+const getCurrentDateTimeLocal = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const day = now.getDate().toString().padStart(2, '0');
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+// --- Sub-componentes del Panel ---
 
 const EventCreator = ({ onEventCreated }) => {
   const [eventName, setEventName] = useState('');
@@ -24,13 +48,17 @@ const EventCreator = ({ onEventCreated }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage({ type: '', text: '' });
+    const currentDateTime = new Date();
+    const selectedDateTime = new Date(closeDate);
+
+    if (selectedDateTime < currentDateTime) {
+      setMessage({ type: 'error', text: 'La fecha límite no puede ser en el pasado.' });
+      return;
+    }
+
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/events`,
-        { name: eventName, close_date: closeDate },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/events`, { name: eventName, close_date: closeDate }, { headers: { 'Authorization': `Bearer ${token}` } });
       setMessage({ type: 'success', text: `¡Evento "${response.data.name}" creado!` });
       onEventCreated(response.data);
       setEventName('');
@@ -43,11 +71,9 @@ const EventCreator = ({ onEventCreated }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <FormInput id="eventName" label="Nombre del Evento" type="text" value={eventName} onChange={(e) => setEventName(e.target.value)} />
-      <FormInput id="closeDate" label="Fecha Límite de Apuestas" type="datetime-local" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} />
-      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">
-        Crear Evento
-      </button>
-      {message.text && <p className={`mt-4 text-center ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message.text}</p>}
+      <FormInput id="closeDate" label="Fecha Límite" type="datetime-local" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} min={getCurrentDateTimeLocal()} />
+      <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Crear Evento</button>
+      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </form>
   );
 };
@@ -56,32 +82,32 @@ const MatchManager = ({ events }) => {
   const [selectedEvent, setSelectedEvent] = useState('');
   const [localTeam, setLocalTeam] = useState('');
   const [visitorTeam, setVisitorTeam] = useState('');
-  const [matchDate, setMatchDate] = useState('');
+  const [matchDatetime, setMatchDatetime] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
-    if (events.length > 0) {
-      setSelectedEvent(events[0].id);
-    }
+    if (events.length > 0) setSelectedEvent(events[0].id);
   }, [events]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage({ type: '', text: '' });
     if (!selectedEvent) {
       setMessage({ type: 'error', text: 'Por favor, selecciona un evento.' });
       return;
     }
     const token = localStorage.getItem('token');
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/matches`,
-        { event_id: selectedEvent, local_team: localTeam, visitor_team: visitorTeam, match_date: matchDate },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const payload = { 
+        event_id: selectedEvent, 
+        local_team: localTeam, 
+        visitor_team: visitorTeam, 
+        match_datetime: matchDatetime
+      };
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/matches`, payload, { headers: { 'Authorization': `Bearer ${token}` } });
       setMessage({ type: 'success', text: '¡Partido agregado exitosamente!' });
       setLocalTeam('');
       setVisitorTeam('');
-      setMatchDate('');
+      setMatchDatetime('');
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al agregar el partido.' });
     }
@@ -90,29 +116,23 @@ const MatchManager = ({ events }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="event-select" className="block text-sm font-medium text-gray-300 mb-1">Seleccionar Evento</label>
-        <select 
-          id="event-select" 
-          value={selectedEvent} 
-          onChange={(e) => setSelectedEvent(e.target.value)} 
-          className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-        >
-          {events.length > 0 ? (
-            events.map(event => (
-              <option key={event.id} value={event.id}>{event.name}</option>
-            ))
-          ) : (
-            <option disabled>No hay eventos disponibles. Crea uno primero.</option>
-          )}
+        <label htmlFor="event-select" className="block text-sm font-bold text-texto-secundario mb-1">Seleccionar Evento</label>
+        <select id="event-select" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)} className={adminSelectStyle}>
+          {events.length > 0 ? events.map(event => <option key={event.id} value={event.id}>{event.name}</option>) : <option disabled>No hay eventos disponibles.</option>}
         </select>
       </div>
       <FormInput id="localTeam" label="Equipo Local" type="text" value={localTeam} onChange={(e) => setLocalTeam(e.target.value)} />
       <FormInput id="visitorTeam" label="Equipo Visitante" type="text" value={visitorTeam} onChange={(e) => setVisitorTeam(e.target.value)} />
-      <FormInput id="matchDate" label="Fecha del Partido" type="datetime-local" value={matchDate} onChange={(e) => setMatchDate(e.target.value)} />
-      <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">
-        Agregar Partido
-      </button>
-      {message.text && <p className={`mt-4 text-center ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message.text}</p>}
+      <FormInput 
+        id="matchDatetime" 
+        label="Fecha y Hora del Partido" 
+        type="datetime-local" 
+        value={matchDatetime} 
+        onChange={(e) => setMatchDatetime(e.target.value)}
+        required={true} 
+      />
+      <button type="submit" className={`${adminButtonStyle} w-full bg-confirmacion`}>Agregar Partido</button>
+      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </form>
   );
 };
@@ -122,96 +142,236 @@ const KeyGenerator = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [copied, setCopied] = useState(false);
 
   const handleGenerateKey = async () => {
     setLoading(true);
     setError('');
     setNewKey(null);
+    setCopied(false);
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/generate-key`, 
-        { quantity: parseInt(quantity, 10) },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/generate-key`, { quantity: parseInt(quantity, 10) }, { headers: { 'Authorization': `Bearer ${token}` } });
       setNewKey(response.data);
     } catch (err) {
       setError('Error al generar la llave.');
-      console.error(err);
     }
     setLoading(false);
   };
 
+  const handleCopy = () => {
+    if (!newKey) return;
+    navigator.clipboard.writeText(newKey.key_code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000); // Reset after 2 seconds
+  };
+
   return (
     <div className="space-y-4">
-      <FormInput 
-        id="quantity" 
-        label="Cantidad de Llaves en el Código" 
-        type="number" 
-        value={quantity} 
-        onChange={(e) => setQuantity(e.target.value)} 
-      />
-      <button 
-        onClick={handleGenerateKey}
-        disabled={loading}
-        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500">
-        {loading ? 'Generando...' : 'Generar Código'}
-      </button>
-      {error && <p className="mt-4 text-red-400">{error}</p>}
+      <FormInput id="quantity" label="Cantidad de Llaves en el Código" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+      <button onClick={handleGenerateKey} disabled={loading} className={`${adminButtonStyle} w-full bg-secundario text-black`}>{loading ? 'Generando...' : 'Generar Código'}</button>
+      {error && <p className="mt-4 text-primario">{error}</p>}
       {newKey && (
-        <div className="mt-4 p-4 bg-gray-900 rounded-lg">
-          <p className="text-gray-300">Código Generado (vale por {newKey.quantity} llaves):</p>
-          <p className="text-green-400 font-mono text-lg break-all">{newKey.key_code}</p>
-          <p className="text-xs text-gray-500 mt-2">(Cópialo y compártelo con el usuario)</p>
+        <div className="mt-4 p-4 bg-fondo-principal rounded-lg">
+          <p className="text-texto-secundario">Código Generado (vale por {newKey.quantity} llaves):</p>
+          <div className="flex items-center gap-4 mt-2">
+            <p className="text-confirmacion font-mono text-lg break-all flex-grow">{newKey.key_code}</p>
+            <button onClick={handleCopy} className={`${adminButtonStyle} ${copied ? 'bg-confirmacion' : 'bg-primario'} text-sm`}>
+              {copied ? '¡Copiado!' : 'Copiar'}
+            </button>
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-const UserCreator = () => {
+const UserManager = () => {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('player');
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const [createMessage, setCreateMessage] = useState({ type: '', text: '' });
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [listMessage, setListMessage] = useState({ type: '', text: '' });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setMessage({ type: '', text: '' });
+  const fetchUsers = async () => {
+    setLoading(true);
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/users`,
-        { username, password, email, role },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      setMessage({ type: 'success', text: `¡Usuario "${response.data.username}" creado!` });
-      setUsername('');
-      setPassword('');
-      setEmail('');
-      setRole('player');
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/users`, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(response.data);
     } catch (error) {
-      setMessage({ type: 'error', text: error.response?.data?.message || 'Error al crear el usuario.' });
+      setListMessage({ type: 'error', text: 'Error al cargar los usuarios.' });
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/users`, { username, password, email, role }, { headers: { 'Authorization': `Bearer ${token}` } });
+      setCreateMessage({ type: 'success', text: `¡Usuario "${username}" creado!` });
+      fetchUsers();
+      setUsername(''); setPassword(''); setEmail(''); setRole('player');
+      setShowCreateForm(false); // Ocultar formulario después de crear
+    } catch (error) {
+      setCreateMessage({ type: 'error', text: error.response?.data?.message || 'Error al crear el usuario.' });
     }
   };
 
+  const handleRoleChange = async (userId, newRole) => {
+    const token = localStorage.getItem('token');
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/users/${userId}/role`, { role: newRole }, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      setListMessage({ type: 'success', text: 'Rol actualizado.' });
+      setTimeout(() => setListMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setListMessage({ type: 'error', text: 'Error al actualizar el rol.' });
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción es irreversible.')) return;
+    const token = localStorage.getItem('token');
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/users/${userId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(users.filter(u => u.id !== userId));
+      setListMessage({ type: 'success', text: 'Usuario eliminado.' });
+      setTimeout(() => setListMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setListMessage({ type: 'error', text: error.response?.data?.message || 'Error al eliminar.' });
+    }
+  };
+
+  const handleToggleStatus = async (userId, currentStatus) => {
+    const newStatus = !currentStatus;
+    const actionText = newStatus ? 'activar' : 'desactivar';
+    if (!window.confirm(`¿Estás seguro de que quieres ${actionText} este usuario?`)) return;
+    const token = localStorage.getItem('token');
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/users/${userId}/status`, { is_active: newStatus }, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(users.map(u => u.id === userId ? { ...u, is_active: newStatus } : u));
+      setListMessage({ type: 'success', text: `Usuario ${actionText}ado.` });
+      setTimeout(() => setListMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setListMessage({ type: 'error', text: error.response?.data?.message || `Error al ${actionText}.` });
+    }
+  };
+
+  const handleToggleMute = async (userId, currentMuteStatus) => {
+    const newMuteStatus = !currentMuteStatus;
+    const actionText = newMuteStatus ? 'silenciar' : 'reactivar';
+    if (!window.confirm(`¿Estás seguro de que quieres ${actionText} a este usuario?`)) return;
+    const token = localStorage.getItem('token');
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/users/${userId}/mute`, { is_muted: newMuteStatus }, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(users.map(u => u.id === userId ? { ...u, is_muted: newMuteStatus } : u));
+      setListMessage({ type: 'success', text: `Usuario ${actionText}ado.` });
+      setTimeout(() => setListMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setListMessage({ type: 'error', text: error.response?.data?.message || `Error al ${actionText}.` });
+    }
+  };
+
+  const filteredUsers = users.filter(user =>
+    user.username.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <FormInput id="email" label="Correo Electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <FormInput id="username" label="Nombre de Usuario" type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
-      <FormInput id="password" label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      <div>
-        <label htmlFor="role-select" className="block text-sm font-medium text-gray-300 mb-1">Rol</label>
-        <select id="role-select" value={role} onChange={(e) => setRole(e.target.value)} className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md">
-          <option value="player">Player</option>
-          <option value="vip">VIP</option>
-          <option value="admin">Admin</option>
-        </select>
+    <div className="space-y-8">
+      <div className="border-b border-texto-secundario/20 pb-6">
+        <button 
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className={`${adminButtonStyle} w-full ${showCreateForm ? 'bg-primario' : 'bg-confirmacion'}`}
+        >
+            {showCreateForm ? 'Cancelar Creación' : 'Crear Nuevo Usuario'}
+        </button>
+
+        {showCreateForm && (
+            <form onSubmit={handleCreateUser} className="space-y-4 mt-6">
+              <FormInput id="email" label="Correo Electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <FormInput id="username" label="Nombre de Usuario" type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
+              <FormInput id="password" label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <div>
+                <label htmlFor="role-select" className="block text-sm font-bold text-texto-secundario mb-1">Rol</label>
+                <select id="role-select" value={role} onChange={(e) => setRole(e.target.value)} className={adminSelectStyle}>
+                  <option value="player">Player</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Confirmar Creación</button>
+              {createMessage.text && <p className={`mt-2 text-center text-sm ${createMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{createMessage.text}</p>}
+            </form>
+        )}
       </div>
-      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition">
-        Crear Usuario
-      </button>
-      {message.text && <p className={`mt-4 text-center ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message.text}</p>}
-    </form>
+      
+      <div>
+        <h4 className="text-lg font-display font-semibold text-texto-principal mb-4">Gestionar Usuarios</h4>
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Buscar por nombre de usuario..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={adminInputStyle}
+          />
+        </div>
+        {listMessage.text && <p className={`mb-4 text-center text-sm ${listMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{listMessage.text}</p>}
+        {loading ? <p>Cargando usuarios...</p> : (
+          <ul className="space-y-3">
+            {filteredUsers.map(user => (
+              <li key={user.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-fondo-principal p-3 rounded-md gap-2">
+                <div className="flex-grow">
+                    <div>
+                        <span className="font-medium text-texto-principal">{user.username}</span>
+                        <span className="ml-2 text-xs text-texto-secundario">({user.email})</span>
+                    </div>
+                    <div>
+                        <span className={`ml-2 text-xs font-bold ${user.is_active ? 'text-confirmacion' : 'text-primario'}`}>
+                            {user.is_active ? 'Activo' : 'Inactivo'}
+                        </span>
+                        {user.is_muted && (
+                            <span className="ml-2 text-xs font-bold text-yellow-500">
+                                (Silenciado)
+                            </span>
+                        )}
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                  <select value={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value)} className={`${adminSelectStyle} text-sm py-1`}>
+                    <option value="player">Player</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  {user.id !== 1 && user.role !== 'admin' && (
+                    <>
+                      <button onClick={() => handleToggleStatus(user.id, user.is_active)} className={`${user.is_active ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-confirmacion hover:bg-green-600'} text-white font-bold py-1 px-3 rounded-md text-sm transition-all`}>
+                        {user.is_active ? 'Desactivar' : 'Activar'}
+                      </button>
+                       <button onClick={() => handleToggleMute(user.id, user.is_muted)} className={`${user.is_muted ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-600 hover:bg-gray-700'} text-white font-bold py-1 px-3 rounded-md text-sm transition-all`}>
+                        {user.is_muted ? 'Reactivar' : 'Silenciar'}
+                      </button>
+                      <button onClick={() => handleDeleteUser(user.id)} className="bg-primario hover:brightness-110 text-white font-bold py-1 px-3 rounded-md text-sm transition-all">
+                        Eliminar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -222,19 +382,12 @@ const PasswordResetter = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage({ type: '', text: '' });
-    if (!window.confirm(`¿Estás seguro de que quieres resetear la contraseña para ${email}? Esta acción no se puede deshacer.`)) {
-      return;
-    }
+    if (!window.confirm(`¿Estás seguro de que quieres resetear la contraseña para ${email}?`)) return;
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/reset-password`,
-        { email, newPassword },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/reset-password`, { email, newPassword }, { headers: { 'Authorization': `Bearer ${token}` } });
       setMessage({ type: 'success', text: response.data.message });
-      setEmail('');
-      setNewPassword('');
+      setEmail(''); setNewPassword('');
     } catch (error) {
       setMessage({ type: 'error', text: error.response?.data?.message || 'Error al resetear la contraseña.' });
     }
@@ -243,81 +396,89 @@ const PasswordResetter = () => {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <FormInput id="reset-email" label="Email del Usuario" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <FormInput id="new-password" label="Nueva Contraseña Temporal" type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-      <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition">
-        Resetear Contraseña
-      </button>
-      {message.text && <p className={`mt-4 text-center ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message.text}</p>}
+      <FormInput id="new-password" label="Nueva Contraseña" type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+      <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Resetear Contraseña</button>
+      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </form>
   );
 };
 
 
 // COMPONENTE PRINCIPAL
-function AdminPanel() {
+function AdminPanel({ onLeaderboardUpdate }) {
   const [events, setEvents] = useState([]);
-  const [activeTab, setActiveTab] = useState('events');
+  const [activeTab, setActiveTab] = useState('manageEvents'); // <-- PESTAÑA INICIAL CAMBIADA
 
   const fetchEvents = async () => {
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/events`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/events`, { headers: { 'Authorization': `Bearer ${token}` } });
       setEvents(response.data);
     } catch (error) {
       console.error("Error al cargar los eventos", error);
     }
   };
 
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  useEffect(() => { fetchEvents(); }, []);
 
   const handleEventCreated = (newEvent) => {
     setEvents(prevEvents => [newEvent, ...prevEvents]);
     setActiveTab('matches');
   };
 
-  const renderActiveTab = () => {
-    switch (activeTab) {
-      case 'events':
-        return <EventCreator onEventCreated={handleEventCreated} />;
-      case 'matches':
-        return <MatchManager events={events} />;
-      case 'keys':
-        return <KeyGenerator />;
-      case 'users':
-        return <UserCreator />;
-      case 'resetPassword':
-        return <PasswordResetter />;
-      default:
-        return null;
+  // <-- NUEVA FUNCIÓN PARA BORRAR EVENTOS -->
+  const handleDeleteEvent = async (eventId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este evento? Se borrarán todos sus partidos y predicciones. Esta acción es irreversible.')) {
+        return;
+    }
+    const token = localStorage.getItem('token');
+    try {
+        await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/events/${eventId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        fetchEvents(); // Recargar eventos para actualizar la UI
+    } catch (error) {
+        console.error("Error al eliminar el evento", error);
+        // Aquí se podría mostrar un mensaje de error al usuario
     }
   };
 
-  return (
-    <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-2xl mt-6 text-white">
-      <h3 className="text-2xl font-bold mb-6 text-center">Panel de Administrador</h3>
-      
-      <div className="flex flex-wrap justify-center border-b border-gray-600 mb-6">
-        <button onClick={() => setActiveTab('events')} className={`py-2 px-4 font-semibold transition ${activeTab === 'events' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400'}`}>
-          Eventos
-        </button>
-        <button onClick={() => setActiveTab('matches')} className={`py-2 px-4 font-semibold transition ${activeTab === 'matches' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400'}`}>
-          Partidos
-        </button>
-        <button onClick={() => setActiveTab('keys')} className={`py-2 px-4 font-semibold transition ${activeTab === 'keys' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400'}`}>
-          Llaves
-        </button>
-        <button onClick={() => setActiveTab('users')} className={`py-2 px-4 font-semibold transition ${activeTab === 'users' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400'}`}>
-          Usuarios
-        </button>
-        <button onClick={() => setActiveTab('resetPassword')} className={`py-2 px-4 font-semibold transition ${activeTab === 'resetPassword' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-400'}`}>
-          Resetear Contraseña
-        </button>
-      </div>
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case 'createEvent': return <EventCreator onEventCreated={handleEventCreated} />;
+      case 'manageEvents': return <EventManager events={events} onDeleteEvent={handleDeleteEvent} />;
+      case 'matches': return <MatchManager events={events} />;
+      case 'results': return <ResultsManager events={events} onLeaderboardUpdate={onLeaderboardUpdate} />;
+      case 'keys': return <KeyGenerator />;
+      case 'users': return <UserManager />;
+      case 'chat': return <ChatManager />;
+      case 'premios': return <Prizes />;
+      case 'resetPassword': return <PasswordResetter />;
+      default: return null;
+    }
+  };
 
+  const TabButton = ({ tabName, children }) => (
+    <button onClick={() => setActiveTab(tabName)} className={`py-2 px-4 font-display font-bold uppercase tracking-wider transition-colors ${activeTab === tabName ? 'text-secundario border-b-2 border-secundario' : 'text-texto-secundario hover:text-white'}`}>
+      {children}
+    </button>
+  );
+
+  return (
+    <div className="bg-tarjeta p-5 rounded-lg shadow-lg mt-6">
+      <h3 className={adminTitleStyle}>Panel de Administrador</h3>
+      {/* <-- PESTAÑAS ACTUALIZADAS --> */}
+      <div className="flex flex-wrap justify-center border-b border-texto-secundario/20 mb-6">
+        <TabButton tabName="manageEvents">Gestionar Eventos</TabButton>
+        <TabButton tabName="createEvent">Crear Evento</TabButton>
+        <TabButton tabName="matches">Partidos</TabButton>
+        <TabButton tabName="results">Resultados</TabButton>
+        <TabButton tabName="keys">Llaves</TabButton>
+        <TabButton tabName="users">Usuarios</TabButton>
+        <TabButton tabName="chat">Chat</TabButton>
+        <TabButton tabName="premios">Premios</TabButton>
+        <TabButton tabName="resetPassword">Reset Pass</TabButton>
+      </div>
       <div className="max-w-lg mx-auto">
         {renderActiveTab()}
       </div>

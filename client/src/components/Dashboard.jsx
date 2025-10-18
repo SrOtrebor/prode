@@ -6,6 +6,12 @@ import AdminPanel from './AdminPanel';
 import Leaderboard from './Leaderboard';
 import axios from 'axios';
 
+// --- Estilos Base para Componentes ---
+const cardStyle = "bg-tarjeta p-5 rounded-lg shadow-lg";
+const titleStyle = "font-display text-xl font-bold mb-4 text-center text-texto-principal uppercase tracking-wider";
+const inputStyle = "w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors";
+const buttonStyle = "px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed";
+
 // --- SUB-COMPONENTES DEL DASHBOARD ---
 
 const KeyRedeemer = () => {
@@ -31,58 +37,74 @@ const KeyRedeemer = () => {
   };
 
   return (
-    <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-2xl">
-      <h3 className="text-xl font-bold mb-4 text-center">Canjear Código de Llaves</h3>
-      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row items-center gap-4">
-        <input type="text" placeholder="Introduce tu código..." value={keyCode} onChange={(e) => setKeyCode(e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 transition" />
-        <button type="submit" disabled={loading} className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500">
-          {loading ? 'Canjeando...' : 'Canjear'}
-        </button>
-      </form>
-      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message.text}</p>}
+    <div className={`${cardStyle} h-full flex flex-col`}>
+      <h3 className={titleStyle}>Canjear Código</h3>
+      <div className="flex-grow flex items-center">
+        <form onSubmit={handleSubmit} className="w-full flex flex-col sm:flex-row items-center gap-4">
+          <input type="text" placeholder="Introduce tu código..." value={keyCode} onChange={(e) => setKeyCode(e.target.value)} className={inputStyle} />
+          <button type="submit" disabled={loading} className={`${buttonStyle} w-full sm:w-auto bg-confirmacion`}>
+            {loading ? 'Canjeando...' : 'Canjear'}
+          </button>
+        </form>
+      </div>
+      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </div>
   );
 };
 
-const BenefitUpgrader = ({ profile }) => {
+const BenefitUpgrader = ({ profile, activeEvent }) => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
-  const { refreshUser } = useAuth();
 
-  const handleSpendKey = async (benefit) => {
+  const handleSpendKey = async (benefit, eventId) => {
     setLoading(true);
     setMessage({ type: '', text: '' });
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/keys/spend`, { benefit }, { headers: { 'Authorization': `Bearer ${token}` } });
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/keys/spend`,
+        { benefit, eventId },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
       setMessage({ type: 'success', text: response.data.message });
-      await refreshUser();
+      // Forzar un refresh para que todos los componentes se actualicen
+      window.location.reload();
     } catch (error) {
       setMessage({ type: 'error', text: error.response?.data?.message || 'Error al usar la llave.' });
     }
     setLoading(false);
   };
 
-  if (!profile || profile.role === 'admin' || (profile.role === 'vip' && profile.puede_apostar_resultado)) {
+  if (!profile || profile.role === 'admin') {
     return null;
   }
 
+  const isAlreadyVipForEvent = activeEvent && profile.vip_events && profile.vip_events.includes(activeEvent.id);
+  const canBecomeVip = activeEvent && activeEvent.status === 'open' && !isAlreadyVipForEvent;
+
   return (
-    <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-2xl mt-8">
-      <h3 className="text-xl font-bold mb-4 text-center">Mejoras Disponibles</h3>
-      <div className="space-y-4">
-        {profile.role === 'player' && (
-          <button onClick={() => handleSpendKey('become_vip')} disabled={loading || profile.key_balance < 1} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed">
-            Convertirse en VIP (Cuesta 1 llave)
-          </button>
-        )}
-        {profile.role === 'vip' && !profile.puede_apostar_resultado && (
-          <button onClick={() => handleSpendKey('unlock_score_bet')} disabled={loading || profile.key_balance < 1} className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed">
-            Activar Apuesta por Resultado (Cuesta 1 llave)
-          </button>
-        )}
-        {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message.text}</p>}
+    <div className={`${cardStyle} h-full flex flex-col`}>
+      <h3 className={titleStyle}>Mejoras Disponibles</h3>
+      <div className="flex-grow flex items-center">
+        <div className="w-full space-y-4">
+          {canBecomeVip && (
+            <button 
+              onClick={() => handleSpendKey('become_vip', activeEvent.id)} 
+              disabled={loading || profile.key_balance < 1} 
+              className={`${buttonStyle} w-full bg-secundario text-black`}
+            >
+              Ser VIP para "{activeEvent.name}" (1 Llave)
+            </button>
+          )}
+          {isAlreadyVipForEvent && (
+            <p className="text-center text-texto-secundario">Ya eres VIP para el evento actual.</p>
+          )}
+          {(!activeEvent || activeEvent.status !== 'open') && !isAlreadyVipForEvent && (
+             <p className="text-center text-texto-secundario">No hay un evento activo para el cual puedas volverte VIP.</p>
+          )}
+        </div>
       </div>
+      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </div>
   );
 };
@@ -109,20 +131,23 @@ const UsernameChanger = ({ profile }) => {
     setLoading(false);
   };
 
-  if (!profile || (profile.role !== 'vip' && profile.role !== 'admin')) {
+  // Permiso para cambiar nombre si es admin o tiene algún VIP activo
+  const hasPermission = profile && (profile.role === 'admin' || (profile.vip_events && profile.vip_events.length > 0));
+
+  if (!hasPermission) {
     return null;
   }
 
   return (
-    <div className="bg-gray-800 p-4 sm:p-6 rounded-lg shadow-2xl mt-8">
-      <h3 className="text-xl font-bold mb-4 text-center">Personalización</h3>
+    <div className={cardStyle}>
+      <h3 className={titleStyle}>Personalización</h3>
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row items-center gap-4">
-        <input type="text" placeholder="Elige tu nuevo nick..." value={newUsername} onChange={(e) => setNewUsername(e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 transition" />
-        <button type="submit" disabled={loading} className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500">
+        <input type="text" placeholder="Elige tu nuevo nick..." value={newUsername} onChange={(e) => setNewUsername(e.target.value)} className={inputStyle} />
+        <button type="submit" disabled={loading} className={`${buttonStyle} w-full sm:w-auto bg-secundario text-black`}>
           {loading ? 'Cambiando...' : 'Cambiar Nick'}
         </button>
       </form>
-      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message.text}</p>}
+      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </div>
   );
 };
@@ -132,42 +157,79 @@ function Dashboard() {
   const { user: authInfo, logout } = useAuth();
   const profile = authInfo?.user;
   const [activeEvent, setActiveEvent] = useState(null);
+  const [currentLeaderboardData, setCurrentLeaderboardData] = useState(null);
 
   const showRedeemer = profile && profile.role !== 'admin';
 
+  const RoleTag = ({ profile }) => {
+    if (!profile?.role) return null;
+    
+    const styles = {
+      admin: 'bg-primario text-white',
+      vip: 'bg-secundario text-black',
+      player: 'bg-texto-secundario text-texto-principal'
+    };
+
+    const vipCount = profile.vip_events?.length || 0;
+
+    if (profile.role === 'admin') {
+        return <span className={`px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.admin}`}>Admin</span>;
+    }
+
+    return (
+      <>
+        <span className={`px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.player}`}>Player</span>
+        {vipCount > 0 && (
+          <span className={`ml-2 px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.vip}`}>
+              VIP
+              <sup className="ml-0.5 font-bold">{vipCount}</sup>
+          </span>
+        )}
+      </>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-fondo-principal text-texto-principal font-sans">
       <div className="container mx-auto p-4 md:p-8">
-        <header className="flex flex-wrap justify-between items-center mb-8 pb-4 border-b border-gray-700 gap-4">
+        <header className="flex flex-wrap justify-between items-center mb-8 pb-4 border-b border-texto-secundario/50 gap-4">
           {profile ? (
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">¡Bienvenido, {profile.username}!</h1>
-              <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-1">
-                <p className="text-gray-400">{profile.email}</p>
-                <span className={`px-2 py-1 text-xs font-bold rounded-full ${profile.role === 'admin' ? 'bg-red-500' : profile.role === 'vip' ? 'bg-yellow-500' : 'bg-gray-500'}`}>{profile.role}</span>
-                <span className="px-2 py-1 text-xs font-bold rounded-full bg-purple-500">Llaves: {profile.key_balance}</span>
+            <div className="flex items-center gap-4">
+              <img src="/logo.png" alt="Fulbito Play Logo" className="h-36" />
+              <div>
+                <h1 className="font-display text-2xl sm:text-3xl font-bold text-texto-principal">¡Bienvenido, {profile.username}!</h1>
+                <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-1">
+                  <p className="text-texto-secundario">{profile.email}</p>
+                  <RoleTag profile={profile} />
+                  <span className="flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full bg-tarjeta text-secundario">🔑 Llaves: {profile.key_balance}</span>
+                </div>
               </div>
             </div>
           ) : (
-            <h1 className="text-3xl font-bold">Cargando...</h1>
+            <div className="flex items-center gap-4">
+              <img src="/logo.png" alt="Fulbito Play Logo" className="h-12" />
+              <h1 className="font-display text-3xl font-bold">Cargando...</h1>
+            </div>
           )}
-          <button onClick={logout} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+          <button onClick={logout} className={`${buttonStyle} bg-primario`}>
             Cerrar Sesión
           </button>
         </header>
 
-        {profile && profile.role === 'admin' && <section className="mb-8"><AdminPanel /></section>}
-        
-        {showRedeemer && <section className="mb-8"><KeyRedeemer /></section>}
-        
-        {profile && <section className="mb-8"><BenefitUpgrader profile={profile} /></section>}
+        {profile && profile.role === 'admin' && <section className="mb-8"><AdminPanel onLeaderboardUpdate={setCurrentLeaderboardData} /></section>}
 
-        {profile && <section className="mb-8"><UsernameChanger profile={profile} /></section>}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          {showRedeemer && <KeyRedeemer />}
+          {profile && <BenefitUpgrader profile={profile} activeEvent={activeEvent} />}
+          {profile && <div className="md:col-span-2"><UsernameChanger profile={profile} /></div>}
+        </div>
 
-        <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2"><EventDisplay setEvent={setActiveEvent} /></div>
-          <div className="lg:col-span-1 flex flex-col gap-8">
-            {activeEvent && <Leaderboard eventId={activeEvent.id} />}
+        <main className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          <div className="lg:col-span-3 flex flex-col gap-8">
+            <EventDisplay setEvent={setActiveEvent} />
+            {activeEvent && <Leaderboard eventId={activeEvent.id} leaderboardData={currentLeaderboardData} />}
+          </div>
+          <div className="lg:col-span-2">
             <Chat />
           </div>
         </main>

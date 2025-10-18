@@ -39,52 +39,55 @@ function Login() {
   };
   
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
-      <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-lg">
-        <h2 className="text-3xl font-bold text-center">Iniciar Sesión</h2>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-400" htmlFor="email">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-              disabled={isSubmitting}
-            />
-          </div>
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-400" htmlFor="password">
-              Contraseña
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 mt-1 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-              disabled={isSubmitting}
-            />
-          </div>
-          {error && <p className="text-red-400 text-center">{error}</p>}
-          <div className="flex items-center justify-between">
-            <button
-              type="submit"
-              className="w-full px-4 py-2 font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-500"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Iniciando sesión...' : 'Entrar'}
-            </button>
-          </div>
-        </form>
-        <p className="mt-6 text-center text-gray-400">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-tarjeta p-8 rounded-lg shadow-lg text-center">
+          <img src="/logo.png" alt="Fulbito Play Logo" className="h-24 mx-auto mb-6" />
+          <h2 className="font-display text-3xl font-bold text-center uppercase tracking-wider text-texto-principal">Iniciar Sesión</h2>
+          <form onSubmit={handleSubmit} className="space-y-6 mt-6 text-left">
+            <div>
+              <label className="block text-sm font-bold text-texto-secundario mb-1" htmlFor="email">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-texto-secundario mb-1" htmlFor="password">
+                Contraseña
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+            {error && <p className="text-primario text-center text-sm">{error}</p>}
+            <div>
+              <button
+                type="submit"
+                className="w-full px-4 py-3 font-bold text-white uppercase transition-all bg-confirmacion rounded-md hover:brightness-110 disabled:opacity-50"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Iniciando sesión...' : 'Entrar'}
+              </button>
+            </div>
+          </form>
+        </div>
+        <p className="mt-6 text-center text-texto-secundario">
           ¿No tienes una cuenta?{' '}
-          <Link to="/register" className="font-medium text-blue-400 hover:underline">
+          <Link to="/register" className="font-bold text-secundario hover:brightness-110">
             Regístrate aquí
           </Link>
         </p>
