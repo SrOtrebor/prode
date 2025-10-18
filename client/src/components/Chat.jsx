@@ -44,11 +44,19 @@ function Chat({ isFullScreen = false }) {
     fetchMessages();
 
     const socket = io(import.meta.env.VITE_API_URL);
+    
     socket.on('new_message', (newMessage) => {
       setMessages(prevMessages => [...prevMessages, newMessage]);
     });
 
+    // Listener para limpiar el chat
+    socket.on('chat_cleared', () => {
+      setMessages([]);
+    });
+
     return () => {
+      socket.off('new_message');
+      socket.off('chat_cleared');
       socket.disconnect();
     };
   }, []);

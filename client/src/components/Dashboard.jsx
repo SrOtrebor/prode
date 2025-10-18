@@ -52,19 +52,23 @@ const KeyRedeemer = () => {
   );
 };
 
-const BenefitUpgrader = ({ profile }) => {
+const BenefitUpgrader = ({ profile, activeEvent }) => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
-  const { refreshUser } = useAuth();
 
-  const handleSpendKey = async (benefit) => {
+  const handleSpendKey = async (benefit, eventId) => {
     setLoading(true);
     setMessage({ type: '', text: '' });
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/keys/spend`, { benefit }, { headers: { 'Authorization': `Bearer ${token}` } });
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/keys/spend`,
+        { benefit, eventId },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
       setMessage({ type: 'success', text: response.data.message });
-      await refreshUser();
+      // Forzar un refresh para que todos los componentes se actualicen
+      window.location.reload();
     } catch (error) {
       setMessage({ type: 'error', text: error.response?.data?.message || 'Error al usar la llave.' });
     }
@@ -75,15 +79,28 @@ const BenefitUpgrader = ({ profile }) => {
     return null;
   }
 
+  const isAlreadyVipForEvent = activeEvent && profile.vip_events && profile.vip_events.includes(activeEvent.id);
+  const canBecomeVip = activeEvent && activeEvent.status === 'open' && !isAlreadyVipForEvent;
+
   return (
     <div className={`${cardStyle} h-full flex flex-col`}>
       <h3 className={titleStyle}>Mejoras Disponibles</h3>
       <div className="flex-grow flex items-center">
         <div className="w-full space-y-4">
-          {profile.role === 'player' && (
-            <button onClick={() => handleSpendKey('become_vip')} disabled={loading || profile.key_balance < 1} className={`${buttonStyle} w-full bg-secundario text-black`}>
-              Convertirse en VIP (Cuesta 1 llave)
+          {canBecomeVip && (
+            <button 
+              onClick={() => handleSpendKey('become_vip', activeEvent.id)} 
+              disabled={loading || profile.key_balance < 1} 
+              className={`${buttonStyle} w-full bg-secundario text-black`}
+            >
+              Ser VIP para "{activeEvent.name}" (1 Llave)
             </button>
+          )}
+          {isAlreadyVipForEvent && (
+            <p className="text-center text-texto-secundario">Ya eres VIP para el evento actual.</p>
+          )}
+          {(!activeEvent || activeEvent.status !== 'open') && !isAlreadyVipForEvent && (
+             <p className="text-center text-texto-secundario">No hay un evento activo para el cual puedas volverte VIP.</p>
           )}
         </div>
       </div>
@@ -114,7 +131,10 @@ const UsernameChanger = ({ profile }) => {
     setLoading(false);
   };
 
-  if (!profile || (profile.role !== 'vip' && profile.role !== 'admin')) {
+  // Permiso para cambiar nombre si es admin o tiene algún VIP activo
+  const hasPermission = profile && (profile.role === 'admin' || (profile.vip_events && profile.vip_events.length > 0));
+
+  if (!hasPermission) {
     return null;
   }
 
@@ -137,17 +157,36 @@ function Dashboard() {
   const { user: authInfo, logout } = useAuth();
   const profile = authInfo?.user;
   const [activeEvent, setActiveEvent] = useState(null);
+  const [currentLeaderboardData, setCurrentLeaderboardData] = useState(null);
 
   const showRedeemer = profile && profile.role !== 'admin';
 
-  const RoleTag = ({ role }) => {
-    if (!role) return null;
+  const RoleTag = ({ profile }) => {
+    if (!profile?.role) return null;
+    
     const styles = {
       admin: 'bg-primario text-white',
       vip: 'bg-secundario text-black',
       player: 'bg-texto-secundario text-texto-principal'
+    };
+
+    const vipCount = profile.vip_events?.length || 0;
+
+    if (profile.role === 'admin') {
+        return <span className={`px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.admin}`}>Admin</span>;
     }
-    return <span className={`px-2 py-1 text-xs font-bold rounded-full uppercase ${styles[role]}`}>{role}</span>
+
+    return (
+      <>
+        <span className={`px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.player}`}>Player</span>
+        {vipCount > 0 && (
+          <span className={`ml-2 px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.vip}`}>
+              VIP
+              <sup className="ml-0.5 font-bold">{vipCount}</sup>
+          </span>
+        )}
+      </>
+    );
   }
 
   return (
@@ -161,7 +200,7 @@ function Dashboard() {
                 <h1 className="font-display text-2xl sm:text-3xl font-bold text-texto-principal">¡Bienvenido, {profile.username}!</h1>
                 <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-1">
                   <p className="text-texto-secundario">{profile.email}</p>
-                  <RoleTag role={profile.role} />
+                  <RoleTag profile={profile} />
                   <span className="flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full bg-tarjeta text-secundario">🔑 Llaves: {profile.key_balance}</span>
                 </div>
               </div>
@@ -177,18 +216,18 @@ function Dashboard() {
           </button>
         </header>
 
-        {profile && profile.role === 'admin' && <section className="mb-8"><AdminPanel /></section>}
+        {profile && profile.role === 'admin' && <section className="mb-8"><AdminPanel onLeaderboardUpdate={setCurrentLeaderboardData} /></section>}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
           {showRedeemer && <KeyRedeemer />}
-          {profile && <BenefitUpgrader profile={profile} />}
+          {profile && <BenefitUpgrader profile={profile} activeEvent={activeEvent} />}
           {profile && <div className="md:col-span-2"><UsernameChanger profile={profile} /></div>}
         </div>
 
         <main className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           <div className="lg:col-span-3 flex flex-col gap-8">
             <EventDisplay setEvent={setActiveEvent} />
-            {activeEvent && <Leaderboard eventId={activeEvent.id} />}
+            {activeEvent && <Leaderboard eventId={activeEvent.id} leaderboardData={currentLeaderboardData} />}
           </div>
           <div className="lg:col-span-2">
             <Chat />

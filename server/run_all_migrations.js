@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { exec } = require('child_process');
+const path = require('path');
 
 async function runMigration(scriptPath) {
   return new Promise((resolve, reject) => {
@@ -29,8 +30,8 @@ async function runMigration(scriptPath) {
 async function runAllMigrations() {
   try {
     console.log('Iniciando la ejecución de todas las migraciones...');
-    await runMigration('./server/migrate_db_11.js');
-    await runMigration('./server/migrate_db_12.js');
+    await runMigration(path.join(__dirname, 'migrate_db_11.js'));
+    await runMigration(path.join(__dirname, 'migrate_db_12.js'));
     console.log('Todas las migraciones se ejecutaron con éxito.');
   } catch (error) {
     console.error('Una o más migraciones fallaron. Deteniendo el proceso.');

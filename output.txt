@@ -1,0 +1,13 @@
+[dotenv@17.2.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.2.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+Iniciando migración para unificar columnas de fecha y hora de partidos...
+C:\Prode\prode\server\node_modules\pg-pool\index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+Error: SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string
+    at C:\Prode\prode\server\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async migrateDatabase (C:\Prode\prode\server\migrate_db_11.js:6:18)
+
+Node.js v22.20.0

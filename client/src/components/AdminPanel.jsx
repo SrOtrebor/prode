@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import ResultsManager from './ResultsManager';
+import EventManager from './EventManager'; // <-- IMPORTADO
+
+import ChatManager from './ChatManager';
+import Prizes from './Prizes';
 
 // --- Estilos Base para Componentes del Panel ---
 const adminTitleStyle = "font-display text-xl font-bold mb-4 text-center text-texto-principal uppercase tracking-wider";
@@ -78,7 +82,7 @@ const MatchManager = ({ events }) => {
   const [selectedEvent, setSelectedEvent] = useState('');
   const [localTeam, setLocalTeam] = useState('');
   const [visitorTeam, setVisitorTeam] = useState('');
-  const [matchDate, setMatchDate] = useState('');
+  const [matchDatetime, setMatchDatetime] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
@@ -87,14 +91,23 @@ const MatchManager = ({ events }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedEvent) return setMessage({ type: 'error', text: 'Por favor, selecciona un evento.' });
+    if (!selectedEvent) {
+      setMessage({ type: 'error', text: 'Por favor, selecciona un evento.' });
+      return;
+    }
     const token = localStorage.getItem('token');
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/matches`, { event_id: selectedEvent, local_team: localTeam, visitor_team: visitorTeam, match_date: matchDate }, { headers: { 'Authorization': `Bearer ${token}` } });
+      const payload = { 
+        event_id: selectedEvent, 
+        local_team: localTeam, 
+        visitor_team: visitorTeam, 
+        match_datetime: matchDatetime
+      };
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/matches`, payload, { headers: { 'Authorization': `Bearer ${token}` } });
       setMessage({ type: 'success', text: '¡Partido agregado exitosamente!' });
       setLocalTeam('');
       setVisitorTeam('');
-      setMatchDate('');
+      setMatchDatetime('');
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al agregar el partido.' });
     }
@@ -110,7 +123,14 @@ const MatchManager = ({ events }) => {
       </div>
       <FormInput id="localTeam" label="Equipo Local" type="text" value={localTeam} onChange={(e) => setLocalTeam(e.target.value)} />
       <FormInput id="visitorTeam" label="Equipo Visitante" type="text" value={visitorTeam} onChange={(e) => setVisitorTeam(e.target.value)} />
-      <FormInput id="matchDate" label="Fecha del Partido" type="datetime-local" value={matchDate} onChange={(e) => setMatchDate(e.target.value)} />
+      <FormInput 
+        id="matchDatetime" 
+        label="Fecha y Hora del Partido" 
+        type="datetime-local" 
+        value={matchDatetime} 
+        onChange={(e) => setMatchDatetime(e.target.value)}
+        required={true} 
+      />
       <button type="submit" className={`${adminButtonStyle} w-full bg-confirmacion`}>Agregar Partido</button>
       {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
     </form>
@@ -175,18 +195,22 @@ const UserManager = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [listMessage, setListMessage] = useState({ type: '', text: '' });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/users`, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(response.data);
+    } catch (error) {
+      setListMessage({ type: 'error', text: 'Error al cargar los usuarios.' });
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      const token = localStorage.getItem('token');
-      try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/users`, { headers: { 'Authorization': `Bearer ${token}` } });
-        setUsers(response.data);
-      } catch (error) {
-        setListMessage({ type: 'error', text: 'Error al cargar los usuarios.' });
-      }
-      setLoading(false);
-    };
     fetchUsers();
   }, []);
 
@@ -194,10 +218,11 @@ const UserManager = () => {
     e.preventDefault();
     const token = localStorage.getItem('token');
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/users`, { username, password, email, role }, { headers: { 'Authorization': `Bearer ${token}` } });
-      setCreateMessage({ type: 'success', text: `¡Usuario "${response.data.username}" creado!` });
-      setUsers(prevUsers => [...prevUsers, response.data]);
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/users`, { username, password, email, role }, { headers: { 'Authorization': `Bearer ${token}` } });
+      setCreateMessage({ type: 'success', text: `¡Usuario "${username}" creado!` });
+      fetchUsers();
       setUsername(''); setPassword(''); setEmail(''); setRole('player');
+      setShowCreateForm(false); // Ocultar formulario después de crear
     } catch (error) {
       setCreateMessage({ type: 'error', text: error.response?.data?.message || 'Error al crear el usuario.' });
     }
@@ -208,47 +233,138 @@ const UserManager = () => {
     try {
       await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/users/${userId}/role`, { role: newRole }, { headers: { 'Authorization': `Bearer ${token}` } });
       setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
-      setListMessage({ type: 'success', text: 'Rol actualizado correctamente.' });
+      setListMessage({ type: 'success', text: 'Rol actualizado.' });
       setTimeout(() => setListMessage({ type: '', text: '' }), 3000);
     } catch (error) {
       setListMessage({ type: 'error', text: 'Error al actualizar el rol.' });
     }
   };
 
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción es irreversible.')) return;
+    const token = localStorage.getItem('token');
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/users/${userId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(users.filter(u => u.id !== userId));
+      setListMessage({ type: 'success', text: 'Usuario eliminado.' });
+      setTimeout(() => setListMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setListMessage({ type: 'error', text: error.response?.data?.message || 'Error al eliminar.' });
+    }
+  };
+
+  const handleToggleStatus = async (userId, currentStatus) => {
+    const newStatus = !currentStatus;
+    const actionText = newStatus ? 'activar' : 'desactivar';
+    if (!window.confirm(`¿Estás seguro de que quieres ${actionText} este usuario?`)) return;
+    const token = localStorage.getItem('token');
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/users/${userId}/status`, { is_active: newStatus }, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(users.map(u => u.id === userId ? { ...u, is_active: newStatus } : u));
+      setListMessage({ type: 'success', text: `Usuario ${actionText}ado.` });
+      setTimeout(() => setListMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setListMessage({ type: 'error', text: error.response?.data?.message || `Error al ${actionText}.` });
+    }
+  };
+
+  const handleToggleMute = async (userId, currentMuteStatus) => {
+    const newMuteStatus = !currentMuteStatus;
+    const actionText = newMuteStatus ? 'silenciar' : 'reactivar';
+    if (!window.confirm(`¿Estás seguro de que quieres ${actionText} a este usuario?`)) return;
+    const token = localStorage.getItem('token');
+    try {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/users/${userId}/mute`, { is_muted: newMuteStatus }, { headers: { 'Authorization': `Bearer ${token}` } });
+      setUsers(users.map(u => u.id === userId ? { ...u, is_muted: newMuteStatus } : u));
+      setListMessage({ type: 'success', text: `Usuario ${actionText}ado.` });
+      setTimeout(() => setListMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setListMessage({ type: 'error', text: error.response?.data?.message || `Error al ${actionText}.` });
+    }
+  };
+
+  const filteredUsers = users.filter(user =>
+    user.username.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="space-y-8">
-      <div>
-        <h4 className="text-lg font-display font-semibold text-texto-principal mb-4 border-b border-texto-secundario/50 pb-2">Crear Nuevo Usuario</h4>
-        <form onSubmit={handleCreateUser} className="space-y-4">
-          <FormInput id="email" label="Correo Electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <FormInput id="username" label="Nombre de Usuario" type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <FormInput id="password" label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <div>
-            <label htmlFor="role-select" className="block text-sm font-bold text-texto-secundario mb-1">Rol</label>
-            <select id="role-select" value={role} onChange={(e) => setRole(e.target.value)} className={adminSelectStyle}>
-              <option value="player">Player</option>
-              <option value="vip">VIP</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Crear Usuario</button>
-          {createMessage.text && <p className={`mt-2 text-center text-sm ${createMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{createMessage.text}</p>}
-        </form>
+      <div className="border-b border-texto-secundario/20 pb-6">
+        <button 
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className={`${adminButtonStyle} w-full ${showCreateForm ? 'bg-primario' : 'bg-confirmacion'}`}
+        >
+            {showCreateForm ? 'Cancelar Creación' : 'Crear Nuevo Usuario'}
+        </button>
+
+        {showCreateForm && (
+            <form onSubmit={handleCreateUser} className="space-y-4 mt-6">
+              <FormInput id="email" label="Correo Electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <FormInput id="username" label="Nombre de Usuario" type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
+              <FormInput id="password" label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <div>
+                <label htmlFor="role-select" className="block text-sm font-bold text-texto-secundario mb-1">Rol</label>
+                <select id="role-select" value={role} onChange={(e) => setRole(e.target.value)} className={adminSelectStyle}>
+                  <option value="player">Player</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <button type="submit" className={`${adminButtonStyle} w-full bg-primario`}>Confirmar Creación</button>
+              {createMessage.text && <p className={`mt-2 text-center text-sm ${createMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{createMessage.text}</p>}
+            </form>
+        )}
       </div>
+      
       <div>
-        <h4 className="text-lg font-display font-semibold text-texto-principal mb-4 border-b border-texto-secundario/50 pb-2">Gestionar Usuarios</h4>
+        <h4 className="text-lg font-display font-semibold text-texto-principal mb-4">Gestionar Usuarios</h4>
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Buscar por nombre de usuario..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={adminInputStyle}
+          />
+        </div>
         {listMessage.text && <p className={`mb-4 text-center text-sm ${listMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{listMessage.text}</p>}
         {loading ? <p>Cargando usuarios...</p> : (
           <ul className="space-y-3">
-            {users.map(user => (
-              <li key={user.id} className="flex flex-col sm:flex-row items-center justify-between bg-fondo-principal p-3 rounded-md">
-                <span className="font-medium text-texto-principal mb-2 sm:mb-0">{user.username}</span>
-                <div className="flex items-center">
-                  <select value={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value)} className={`${adminSelectStyle} text-sm`}>
+            {filteredUsers.map(user => (
+              <li key={user.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-fondo-principal p-3 rounded-md gap-2">
+                <div className="flex-grow">
+                    <div>
+                        <span className="font-medium text-texto-principal">{user.username}</span>
+                        <span className="ml-2 text-xs text-texto-secundario">({user.email})</span>
+                    </div>
+                    <div>
+                        <span className={`ml-2 text-xs font-bold ${user.is_active ? 'text-confirmacion' : 'text-primario'}`}>
+                            {user.is_active ? 'Activo' : 'Inactivo'}
+                        </span>
+                        {user.is_muted && (
+                            <span className="ml-2 text-xs font-bold text-yellow-500">
+                                (Silenciado)
+                            </span>
+                        )}
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                  <select value={user.role} onChange={(e) => handleRoleChange(user.id, e.target.value)} className={`${adminSelectStyle} text-sm py-1`}>
                     <option value="player">Player</option>
-                    <option value="vip">VIP</option>
                     <option value="admin">Admin</option>
                   </select>
+                  {user.id !== 1 && user.role !== 'admin' && (
+                    <>
+                      <button onClick={() => handleToggleStatus(user.id, user.is_active)} className={`${user.is_active ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-confirmacion hover:bg-green-600'} text-white font-bold py-1 px-3 rounded-md text-sm transition-all`}>
+                        {user.is_active ? 'Desactivar' : 'Activar'}
+                      </button>
+                       <button onClick={() => handleToggleMute(user.id, user.is_muted)} className={`${user.is_muted ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-600 hover:bg-gray-700'} text-white font-bold py-1 px-3 rounded-md text-sm transition-all`}>
+                        {user.is_muted ? 'Reactivar' : 'Silenciar'}
+                      </button>
+                      <button onClick={() => handleDeleteUser(user.id)} className="bg-primario hover:brightness-110 text-white font-bold py-1 px-3 rounded-md text-sm transition-all">
+                        Eliminar
+                      </button>
+                    </>
+                  )}
                 </div>
               </li>
             ))}
@@ -289,9 +405,9 @@ const PasswordResetter = () => {
 
 
 // COMPONENTE PRINCIPAL
-function AdminPanel() {
+function AdminPanel({ onLeaderboardUpdate }) {
   const [events, setEvents] = useState([]);
-  const [activeTab, setActiveTab] = useState('events');
+  const [activeTab, setActiveTab] = useState('manageEvents'); // <-- PESTAÑA INICIAL CAMBIADA
 
   const fetchEvents = async () => {
     const token = localStorage.getItem('token');
@@ -310,13 +426,33 @@ function AdminPanel() {
     setActiveTab('matches');
   };
 
+  // <-- NUEVA FUNCIÓN PARA BORRAR EVENTOS -->
+  const handleDeleteEvent = async (eventId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este evento? Se borrarán todos sus partidos y predicciones. Esta acción es irreversible.')) {
+        return;
+    }
+    const token = localStorage.getItem('token');
+    try {
+        await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/events/${eventId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        fetchEvents(); // Recargar eventos para actualizar la UI
+    } catch (error) {
+        console.error("Error al eliminar el evento", error);
+        // Aquí se podría mostrar un mensaje de error al usuario
+    }
+  };
+
   const renderActiveTab = () => {
     switch (activeTab) {
-      case 'events': return <EventCreator onEventCreated={handleEventCreated} />;
+      case 'createEvent': return <EventCreator onEventCreated={handleEventCreated} />;
+      case 'manageEvents': return <EventManager events={events} onDeleteEvent={handleDeleteEvent} />;
       case 'matches': return <MatchManager events={events} />;
-      case 'results': return <ResultsManager events={events} />;
+      case 'results': return <ResultsManager events={events} onLeaderboardUpdate={onLeaderboardUpdate} />;
       case 'keys': return <KeyGenerator />;
       case 'users': return <UserManager />;
+      case 'chat': return <ChatManager />;
+      case 'premios': return <Prizes />;
       case 'resetPassword': return <PasswordResetter />;
       default: return null;
     }
@@ -331,12 +467,16 @@ function AdminPanel() {
   return (
     <div className="bg-tarjeta p-5 rounded-lg shadow-lg mt-6">
       <h3 className={adminTitleStyle}>Panel de Administrador</h3>
+      {/* <-- PESTAÑAS ACTUALIZADAS --> */}
       <div className="flex flex-wrap justify-center border-b border-texto-secundario/20 mb-6">
-        <TabButton tabName="events">Eventos</TabButton>
+        <TabButton tabName="manageEvents">Gestionar Eventos</TabButton>
+        <TabButton tabName="createEvent">Crear Evento</TabButton>
         <TabButton tabName="matches">Partidos</TabButton>
         <TabButton tabName="results">Resultados</TabButton>
         <TabButton tabName="keys">Llaves</TabButton>
         <TabButton tabName="users">Usuarios</TabButton>
+        <TabButton tabName="chat">Chat</TabButton>
+        <TabButton tabName="premios">Premios</TabButton>
         <TabButton tabName="resetPassword">Reset Pass</TabButton>
       </div>
       <div className="max-w-lg mx-auto">

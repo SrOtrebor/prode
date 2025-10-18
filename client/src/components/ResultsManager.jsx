@@ -1,25 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
+const formatDateTime = (isoString) => {
+  if (!isoString) return 'Fecha no definida';
+  const date = new Date(isoString);
+  return date.toLocaleString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).replace(',', ' - ');
+};
+
+function ResultsManager({ events = [], onLeaderboardUpdate }) {
   const [selectedEvent, setSelectedEvent] = useState('');
   const [matches, setMatches] = useState([]);
   const [results, setResults] = useState({});
   const [message, setMessage] = useState('');
 
-  // 1. Este useEffect ahora solo se encarga de seleccionar el primer evento
-  // cuando la lista de eventos cambia (o se carga por primera vez).
   useEffect(() => {
     if (events.length > 0 && !selectedEvent) {
       setSelectedEvent(events[0].id);
     }
   }, [events, selectedEvent]);
 
-  // 2. Este segundo useEffect se encarga de buscar los partidos
-  // y se ejecuta SOLO cuando 'selectedEvent' tiene un valor válido.
   useEffect(() => {
     if (!selectedEvent) {
-      setMatches([]); // Si no hay evento seleccionado, la lista de partidos está vacía
+      setMatches([]);
       return;
     }
 
@@ -30,19 +39,17 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
           headers: { 'Authorization': `Bearer ${token}` }
         });
         setMatches(response.data);
-        setResults({}); // Limpiamos los resultados anteriores al cambiar de fecha
+        setResults({});
         setMessage('');
       } catch (error) {
         console.error("Error al cargar los partidos", error);
         setMessage('Error al cargar los partidos de esta fecha.');
-        setMatches([]); // Si hay error, vaciamos la lista de partidos
+        setMatches([]);
       }
     };
     
     fetchMatches();
-  }, [selectedEvent]); // La dependencia clave es 'selectedEvent'
-
-  // ... (el resto de las funciones como handleResultChange, handleSaveResults, etc., quedan igual)
+  }, [selectedEvent]);
 
   const handleResultChange = (matchId, team, value) => {
     const sanitizedValue = value.replace(/[^0-9]/g, '');
@@ -64,11 +71,14 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
     }));
 
     try {
-        await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/results`, 
+        const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/results`, 
         { results: resultsToSave },
         { headers: { 'Authorization': `Bearer ${token}` } }
         );
-        setMessage('Resultados guardados temporalmente.');
+        setMessage(response.data.message);
+        if (onLeaderboardUpdate && response.data.leaderboard) {
+          onLeaderboardUpdate(response.data.leaderboard);
+        }
     } catch (error) {
         setMessage('Error al guardar los resultados.');
     }
@@ -84,6 +94,24 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
         setMessage('¡Puntos calculados y fecha finalizada!');
     } catch (error) {
         setMessage('Error al calcular los puntos.');
+    }
+  };
+
+  const handleDeleteMatch = async (matchId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este partido? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/matches/${matchId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setMatches(prevMatches => prevMatches.filter(match => match.id !== matchId));
+      setMessage('Partido eliminado correctamente.');
+    } catch (error) {
+      console.error("Error al eliminar el partido", error);
+      setMessage('Error al eliminar el partido.');
     }
   };
 
@@ -106,7 +134,10 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
       <div className="space-y-3">
         {matches.map(match => (
           <div key={match.id} className="flex flex-col sm:flex-row items-center justify-between bg-gray-900 p-3 rounded-md">
-            <span className="text-gray-300 mb-2 sm:mb-0">{match.local_team} vs {match.visitor_team}</span>
+            <div className="flex-grow mb-2 sm:mb-0">
+                <span className="text-gray-300">{match.local_team} vs {match.visitor_team}</span>
+                <p className="text-xs text-gray-400 mt-1 italic">{formatDateTime(match.match_datetime)}</p>
+            </div>
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -123,6 +154,9 @@ function ResultsManager({ events = [] }) { // Mantenemos el valor por defecto
                 className="w-16 text-center bg-gray-700 border border-gray-600 rounded-md py-1 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="V"
               />
+              <button onClick={() => handleDeleteMatch(match.id)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded-md text-xs transition-colors">
+                X
+              </button>
             </div>
           </div>
         ))}

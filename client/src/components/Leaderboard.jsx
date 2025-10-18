@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const Leaderboard = ({ eventId }) => {
+const Leaderboard = ({ eventId, leaderboardData }) => {
     const [leaderboard, setLeaderboard] = useState([]);
     const [error, setError] = useState('');
     const { user } = useAuth();
@@ -21,7 +21,10 @@ const Leaderboard = ({ eventId }) => {
     };
 
     useEffect(() => {
-        if (eventId && token) {
+        if (leaderboardData) {
+            const sortedData = leaderboardData.sort((a, b) => parseInt(b.total_points, 10) - parseInt(a.total_points, 10));
+            setLeaderboard(sortedData);
+        } else if (eventId && token) {
             const fetchLeaderboard = async () => {
                 try {
                     const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/leaderboard/${eventId}`, {
@@ -39,7 +42,7 @@ const Leaderboard = ({ eventId }) => {
 
             fetchLeaderboard();
         }
-    }, [eventId, token]);
+    }, [eventId, token, leaderboardData]);
 
     if (error) {
         return <div className="bg-tarjeta p-5 rounded-lg shadow-lg text-center text-primario">{error}</div>;
