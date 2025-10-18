@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const authMiddleware = require('./middleware/auth');
 const adminAuthMiddleware = require('./middleware/adminAuth');
 const crypto = require('crypto');
+const { calculateMatchPoints } = require('./scoringService');
 require('dotenv').config();
 
 // --- CONFIGURACIÓN DEL SERVIDOR CON SOCKET.IO ---
@@ -95,6 +96,13 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ message: 'Credenciales inválidas.' });
     }
     const user = userResult.rows[0];
+
+    // <-- INICIO: Verificación de usuario activo -->
+    if (!user.is_active) {
+      return res.status(403).json({ message: 'Esta cuenta ha sido desactivada por un administrador.' });
+    }
+    // <-- FIN: Verificación de usuario activo -->
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ message: 'Credenciales inválidas.' });
@@ -117,14 +125,26 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/profile', authMiddleware, async (req, res) => {
   try {
-    // La columna puede_apostar_resultado ya no existe, la quitamos de la consulta
-    const user = await pool.query("SELECT id, username, email, role, key_balance FROM users WHERE id = $1", [req.user.id]);
+    const query = `
+      SELECT id, username, email, role, key_balance,
+            (SELECT array_agg(event_id) FROM vip_statuses WHERE user_id = u.id) as vip_events
+      FROM users u
+      WHERE u.id = $1
+    `;
+    const userResult = await pool.query(query, [req.user.id]);
 
-    if (user.rows.length === 0) {
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
 
-    res.json(user.rows[0]);
+    const user = userResult.rows[0];
+    // Si vip_events es null (porque el usuario no es VIP para ningún evento), lo convertimos a un array vacío
+    if (!user.vip_events) {
+      user.vip_events = [];
+    }
+
+    res.json(user);
+
   } catch (error) {
     console.error('Error en /api/profile:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
@@ -141,22 +161,37 @@ app.put('/api/profile/change-username', authMiddleware, async (req, res) => {
   }
 
   try {
-    // 1. Obtener el perfil del usuario actual
+    // 1. Verificar permisos
     const userResult = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
     const user = userResult.rows[0];
 
-    // 2. Verificar permisos
-    if (user.role !== 'vip' && user.role !== 'admin') {
-      return res.status(403).json({ message: 'No tienes permiso para cambiar tu nombre de usuario.' });
+    let hasPermission = false;
+    if (user.role === 'admin') {
+      hasPermission = true;
+    } else {
+      const vipCheck = await pool.query(
+        `SELECT 1 FROM vip_statuses vs
+         JOIN events e ON vs.event_id = e.id
+         WHERE vs.user_id = $1 AND e.status = 'open'
+         LIMIT 1`,
+        [userId]
+      );
+      if (vipCheck.rows.length > 0) {
+        hasPermission = true;
+      }
     }
 
-    // 3. Verificar que el nuevo nombre de usuario no esté en uso
+    if (!hasPermission) {
+      return res.status(403).json({ message: 'Debes ser Admin o tener un VIP activo para cambiar tu nombre de usuario.' });
+    }
+
+    // 2. Verificar que el nuevo nombre de usuario no esté en uso
     const existingUser = await pool.query("SELECT id FROM users WHERE username = $1 AND id != $2", [newUsername, userId]);
     if (existingUser.rows.length > 0) {
       return res.status(409).json({ message: 'Ese nombre de usuario ya está en uso.' });
     }
 
-    // 4. Actualizar el nombre de usuario
+    // 3. Actualizar el nombre de usuario
     await pool.query("UPDATE users SET username = $1 WHERE id = $2", [newUsername, userId]);
 
     res.status(200).json({ message: '¡Nombre de usuario actualizado exitosamente!' });
@@ -167,26 +202,34 @@ app.put('/api/profile/change-username', authMiddleware, async (req, res) => {
   }
 });
 
-// RUTA ACTUALIZADA: Obtiene el evento activo Y si cada partido está desbloqueado (versión segura)
-app.get('/api/events/active', authMiddleware, async (req, res) => {
+// RUTA para obtener la lista de eventos abiertos
+app.get('/api/events/open', authMiddleware, async (req, res) => {
+  try {
+    const events = await pool.query("SELECT id, name FROM events WHERE status = 'open' ORDER BY id DESC");
+    res.json(events.rows);
+  } catch (error) {
+    console.error('Error al obtener eventos abiertos:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA ACTUALIZADA: Obtiene un evento específico por ID
+app.get('/api/events/:id', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
+    const { id: eventId } = req.params;
     
-    let eventResult = await pool.query("SELECT * FROM events WHERE status = 'open' ORDER BY id DESC LIMIT 1");
+    const eventResult = await pool.query("SELECT * FROM events WHERE id = $1", [eventId]);
 
     if (eventResult.rows.length === 0) {
-      eventResult = await pool.query("SELECT * FROM events WHERE status = 'finished' ORDER BY close_date DESC LIMIT 1");
-    }
-
-    if (eventResult.rows.length === 0) {
-      return res.status(404).json({ message: 'No hay eventos activos o finalizados.' });
+      return res.status(404).json({ message: 'No se encontró el evento.' });
     }
     const event = eventResult.rows[0];
 
     // 1. Obtener todos los partidos del evento
     const matchesQuery = `
       SELECT 
-        m.id, m.local_team, m.visitor_team, m.result_local, m.result_visitor,
+        m.id, m.local_team, m.visitor_team, m.result_local, m.result_visitor, m.match_datetime,
         p.prediction_main AS user_prediction,
         p.predicted_score_local,
         p.predicted_score_visitor,
@@ -194,7 +237,7 @@ app.get('/api/events/active', authMiddleware, async (req, res) => {
       FROM matches m
       LEFT JOIN predictions p ON m.id = p.match_id AND p.user_id = $1
       WHERE m.event_id = $2
-      ORDER BY m.match_date ASC
+      ORDER BY m.match_datetime ASC
     `;
     const matchesResult = await pool.query(matchesQuery, [userId, event.id]);
     const matches = matchesResult.rows;
@@ -213,10 +256,14 @@ app.get('/api/events/active', authMiddleware, async (req, res) => {
       is_unlocked: unlockedIds.has(match.id)
     }));
 
-    res.json({ event: event, matches: matchesWithUnlockStatus });
+    // 4. Verificar si el usuario es VIP para este evento específico
+    const vipCheckResult = await pool.query('SELECT 1 FROM vip_statuses WHERE user_id = $1 AND event_id = $2', [userId, event.id]);
+    const is_vip_for_event = vipCheckResult.rows.length > 0;
+
+    res.json({ event: event, matches: matchesWithUnlockStatus, is_vip_for_event });
 
   } catch (error) {
-    console.error('Error detallado en /api/events/active:', error);
+    console.error(`Error detallado en /api/events/${req.params.id}:`, error);
     res.status(500).json({ message: 'Error interno del servidor al cargar el evento.' });
   }
 });
@@ -232,7 +279,9 @@ app.post('/api/predictions', authMiddleware, async (req, res) => {
 
   const client = await pool.connect();
   try {
-    // --- NUEVA VALIDACIÓN DE FECHA LÍMITE ---
+    await client.query('BEGIN');
+
+    // --- NUEVA VALIDACIÓN DE FECHA LÍMITE (EXISTENTE) ---
     const firstMatchId = predictions[0].match_id;
     const eventResult = await client.query(
       'SELECT e.id, e.close_date FROM events e JOIN matches m ON e.id = m.event_id WHERE m.id = $1',
@@ -240,18 +289,64 @@ app.post('/api/predictions', authMiddleware, async (req, res) => {
     );
 
     if (eventResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       client.release();
       return res.status(404).json({ message: 'El evento asociado a estas predicciones no fue encontrado.' });
     }
 
     const eventCloseDate = eventResult.rows[0].close_date;
     if (new Date() > new Date(eventCloseDate)) {
+      await client.query('ROLLBACK');
       client.release();
       return res.status(403).json({ message: 'El tiempo para enviar o modificar pronósticos para este evento ha finalizado.' });
     }
-    // --- FIN DE LA VALIDACIÓN ---
+    // --- FIN DE LA VALIDACIÓN DE FECHA LÍMITE ---
 
-    await client.query('BEGIN');
+    // --- INICIO: Validación de consistencia de pronósticos (NUEVA) ---
+    const isVipForEventResult = await client.query('SELECT 1 FROM vip_statuses WHERE user_id = $1 AND event_id = $2', [userId, eventResult.rows[0].id]);
+    const isVipForEvent = isVipForEventResult.rows.length > 0;
+
+    for (const prediction of predictions) {
+      const { match_id, prediction_main, predicted_score_local, predicted_score_visitor } = prediction;
+
+      // Solo validar si el usuario es VIP y ha proporcionado scores exactos
+      if (isVipForEvent && predicted_score_local !== null && predicted_score_visitor !== null) {
+        const local = predicted_score_local;
+        const visitor = predicted_score_visitor;
+
+        if (typeof local !== 'number' || typeof visitor !== 'number' || local < 0 || visitor < 0) {
+          await client.query('ROLLBACK');
+          client.release();
+          return res.status(400).json({ message: 'Los resultados exactos deben ser números enteros no negativos.' });
+        }
+
+        switch (prediction_main) {
+          case 'L':
+            if (local <= visitor) {
+              await client.query('ROLLBACK');
+              client.release();
+              return res.status(400).json({ message: `El pronóstico exacto para el partido ${match_id} no coincide con la predicción principal (Victoria Local).` });
+            }
+            break;
+          case 'V':
+            if (visitor <= local) {
+              await client.query('ROLLBACK');
+              client.release();
+              return res.status(400).json({ message: `El pronóstico exacto para el partido ${match_id} no coincide con la predicción principal (Victoria Visitante).` });
+            }
+            break;
+          case 'E':
+            if (local !== visitor) {
+              await client.query('ROLLBACK');
+              client.release();
+              return res.status(400).json({ message: `El pronóstico exacto para el partido ${match_id} no coincide con la predicción principal (Empate).` });
+            }
+            break;
+        }
+      }
+    }
+    // --- FIN: Validación de consistencia de pronósticos ---
+
     for (const prediction of predictions) {
       const { match_id, prediction_main, predicted_score_local, predicted_score_visitor } = prediction;
       const query = `
@@ -272,7 +367,6 @@ app.post('/api/predictions', authMiddleware, async (req, res) => {
     console.error('Error al guardar predicciones:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   } finally {
-    // Asegurarse de que el cliente se libere solo si no se ha hecho ya
     if (!client.isReleased) {
       client.release();
     }
@@ -326,7 +420,7 @@ app.post('/api/events/:eventId/calculate', authMiddleware, adminAuthMiddleware, 
       await client.query('UPDATE predictions SET points_obtained = $1 WHERE id = $2', [points, pred.id]);
     }
 
-    // (Opcional) Cambiamos el estado del evento a 'finished'
+    // Cambiamos el estado del evento a 'finished'
     await client.query("UPDATE events SET status = 'finished' WHERE id = $1", [eventId]);
     
     await client.query('COMMIT');
@@ -370,21 +464,28 @@ app.post('/api/chat/messages', authMiddleware, async (req, res) => {
     try {
       const { message_content } = req.body;
       const userId = req.user.id;
+
+      // Verificar si el usuario está silenciado
+      const userCheckResult = await pool.query('SELECT username, role, is_muted FROM users WHERE id = $1', [userId]);
+      const user = userCheckResult.rows[0];
+
+      if (user.is_muted) {
+        return res.status(403).json({ message: 'No puedes enviar mensajes porque has sido silenciado.' });
+      }
+
       if (!message_content || message_content.trim() === '') {
         return res.status(400).json({ message: 'El contenido del mensaje no puede estar vacío.' });
       }
+
       const newMessageResult = await pool.query(
         "INSERT INTO chat_messages (user_id, message_content) VALUES ($1, $2) RETURNING id, created_at, message_content",
         [userId, message_content]
       );
 
-      const userResult = await pool.query("SELECT username, role FROM users WHERE id = $1", [userId]);
-      const { username, role } = userResult.rows[0];
-
       const finalMessage = {
         ...newMessageResult.rows[0],
-        username: username,
-        role: role // <-- Añadir rol al payload
+        username: user.username,
+        role: user.role
       };
 
       // Emitir el nuevo mensaje a todos los clientes conectados
@@ -392,8 +493,25 @@ app.post('/api/chat/messages', authMiddleware, async (req, res) => {
 
       res.status(201).json(finalMessage);
     } catch (error) {
+      console.error('Error al enviar mensaje de chat:', error);
       res.status(500).json({ message: 'Error interno del servidor.' });
     }
+});
+
+// RUTA DE ADMIN: Borrar todos los mensajes del chat
+app.delete('/api/admin/chat/messages', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    await pool.query('TRUNCATE TABLE chat_messages RESTART IDENTITY');
+    
+    // Emitir un evento a todos los clientes para que limpien su chat
+    io.emit('chat_cleared');
+
+    res.status(200).json({ message: 'El historial del chat ha sido eliminado.' });
+
+  } catch (error) {
+    console.error('Error al borrar los mensajes del chat:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
 });
 
 // NUEVA RUTA: Solo para Admins
@@ -434,7 +552,7 @@ app.post('/api/admin/users', authMiddleware, adminAuthMiddleware, async (req, re
 // RUTA DE ADMIN: Obtener todos los usuarios
 app.get('/api/admin/users', authMiddleware, adminAuthMiddleware, async (req, res) => {
   try {
-    const users = await pool.query("SELECT id, username, role FROM users ORDER BY id ASC");
+    const users = await pool.query("SELECT id, username, email, role, is_active, is_muted FROM users ORDER BY id ASC");
     res.json(users.rows);
   } catch (error) {
     console.error('Error al obtener usuarios:', error);
@@ -471,6 +589,96 @@ app.put('/api/admin/users/:userId/role', authMiddleware, adminAuthMiddleware, as
   }
 });
 
+// RUTA DE ADMIN: Eliminar un usuario
+app.delete('/api/admin/users/:userId', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // No se puede eliminar al usuario admin principal (ID 1, por ejemplo)
+    // Esta es una medida de seguridad importante. Asumimos que el admin principal tiene ID 1.
+    if (userId === '1') {
+      return res.status(403).json({ message: 'No se puede eliminar al administrador principal.' });
+    }
+
+    const deleteOp = await pool.query("DELETE FROM users WHERE id = $1", [userId]);
+
+    if (deleteOp.rowCount === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    res.status(200).json({ message: `El usuario ${userId} ha sido eliminado.` });
+
+  } catch (error) {
+    console.error('Error al eliminar usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA DE ADMIN: Cambiar el estado de activación de un usuario
+app.put('/api/admin/users/:userId/status', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { is_active } = req.body;
+
+    if (typeof is_active !== 'boolean') {
+      return res.status(400).json({ message: 'El estado de activación debe ser un valor booleano.' });
+    }
+
+    // No se puede desactivar al admin principal
+    if (userId === '1' && !is_active) {
+      return res.status(403).json({ message: 'No se puede desactivar al administrador principal.' });
+    }
+
+    const result = await pool.query(
+      "UPDATE users SET is_active = $1 WHERE id = $2 RETURNING id, username, is_active",
+      [is_active, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    res.status(200).json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error al cambiar el estado del usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA DE ADMIN: Silenciar/reactivar un usuario
+app.put('/api/admin/users/:userId/mute', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { is_muted } = req.body;
+
+    if (typeof is_muted !== 'boolean') {
+      return res.status(400).json({ message: 'El estado de silencio debe ser un valor booleano.' });
+    }
+
+    // No se puede silenciar a un admin
+    const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length > 0 && userResult.rows[0].role === 'admin') {
+      return res.status(403).json({ message: 'No se puede silenciar a un administrador.' });
+    }
+
+    const result = await pool.query(
+      "UPDATE users SET is_muted = $1 WHERE id = $2 RETURNING id, username, is_muted",
+      [is_muted, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    res.status(200).json(result.rows[0]);
+
+  } catch (error) {
+    console.error('Error al cambiar el estado de silencio del usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 // RUTA DE ADMIN: Resetear la contraseña de un usuario
 app.post('/api/admin/reset-password', authMiddleware, adminAuthMiddleware, async (req, res) => {
   const { email, newPassword } = req.body;
@@ -498,6 +706,25 @@ app.post('/api/admin/reset-password', authMiddleware, adminAuthMiddleware, async
 
   } catch (error) {
     console.error('Error al resetear la contraseña:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA DE ADMIN: Obtener estadísticas de uso de llaves
+app.get('/api/admin/stats/key-usage', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const vipResult = await pool.query('SELECT COUNT(*) FROM vip_statuses');
+    const unlockedResult = await pool.query('SELECT COUNT(*) FROM unlocked_score_bets');
+
+    const stats = {
+      keys_spent_on_vip: parseInt(vipResult.rows[0].count, 10),
+      keys_spent_on_unlocks: parseInt(unlockedResult.rows[0].count, 10),
+    };
+
+    res.status(200).json(stats);
+
+  } catch (error) {
+    console.error('Error al obtener estadísticas de llaves:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
@@ -540,14 +767,14 @@ app.get('/api/admin/events', authMiddleware, adminAuthMiddleware, async (req, re
 // RUTA DE ADMIN: Agregar un nuevo partido a un evento
 app.post('/api/admin/matches', authMiddleware, adminAuthMiddleware, async (req, res) => {
   try {
-    const { event_id, local_team, visitor_team, match_date } = req.body;
-    if (!event_id || !local_team || !visitor_team || !match_date) {
+    const { event_id, local_team, visitor_team, match_datetime } = req.body;
+    if (!event_id || !local_team || !visitor_team || !match_datetime) {
       return res.status(400).json({ message: 'Todos los campos son requeridos.' });
     }
 
     const newMatch = await pool.query(
-      "INSERT INTO matches (event_id, local_team, visitor_team, match_date) VALUES ($1, $2, $3, $4) RETURNING *",
-      [event_id, local_team, visitor_team, match_date]
+      "INSERT INTO matches (event_id, local_team, visitor_team, match_datetime) VALUES ($1, $2, $3, $4) RETURNING *",
+      [event_id, local_team, visitor_team, match_datetime]
     );
 
     res.status(201).json(newMatch.rows[0]);
@@ -562,7 +789,7 @@ app.post('/api/admin/matches', authMiddleware, adminAuthMiddleware, async (req, 
 app.get('/api/admin/matches/:eventId', authMiddleware, adminAuthMiddleware, async (req, res) => {
   try {
     const { eventId } = req.params;
-    const matches = await pool.query("SELECT id, local_team, visitor_team, result_local, result_visitor FROM matches WHERE event_id = $1 ORDER BY match_date ASC", [eventId]);
+    const matches = await pool.query("SELECT id, local_team, visitor_team, result_local, result_visitor, match_datetime FROM matches WHERE event_id = $1 ORDER BY match_datetime ASC", [eventId]);
     res.json(matches.rows);
   } catch (error) {
     console.error('Error al obtener los partidos del evento:', error);
@@ -587,16 +814,79 @@ app.post('/api/admin/results', authMiddleware, adminAuthMiddleware, async (req, 
         'UPDATE matches SET result_local = $1, result_visitor = $2 WHERE id = $3',
         [result.result_local, result.result_visitor, result.match_id]
       );
+      // Calcular y actualizar los puntos para este partido
+      await calculateMatchPoints(result.match_id, client);
     }
 
     await client.query('COMMIT');
-    res.status(200).json({ message: 'Resultados guardados exitosamente.' });
+
+    // Obtener el eventId de uno de los partidos actualizados
+    const firstMatchId = results[0].match_id;
+    const eventIdResult = await client.query('SELECT event_id FROM matches WHERE id = $1', [firstMatchId]);
+    const eventId = eventIdResult.rows[0].event_id;
+
+    // Obtener la tabla de posiciones actualizada para ese evento
+    const leaderboardQuery = `
+      SELECT
+        u.username,
+        u.role,
+        SUM(p.points_obtained) AS total_points
+      FROM predictions p
+      JOIN users u ON p.user_id = u.id
+      JOIN matches m ON p.match_id = m.id
+      WHERE m.event_id = $1
+      GROUP BY u.username, u.role
+      ORDER BY total_points DESC;
+    `;
+    const updatedLeaderboard = await client.query(leaderboardQuery, [eventId]);
+
+    res.status(200).json({ message: 'Resultados guardados exitosamente.', leaderboard: updatedLeaderboard.rows });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error al guardar resultados:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   } finally {
     client.release();
+  }
+});
+
+// RUTA DE ADMIN: Eliminar un evento
+app.delete('/api/admin/events/:eventId', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    // La configuración ON DELETE CASCADE en la DB se encargará de borrar partidos y predicciones asociadas
+    const deleteOp = await pool.query("DELETE FROM events WHERE id = $1", [eventId]);
+
+    if (deleteOp.rowCount === 0) {
+      return res.status(404).json({ message: 'Evento no encontrado.' });
+    }
+
+    res.status(200).json({ message: `El evento ${eventId} y todos sus datos asociados han sido eliminados.` });
+
+  } catch (error) {
+    console.error('Error al eliminar evento:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// RUTA DE ADMIN: Eliminar un partido
+app.delete('/api/admin/matches/:matchId', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+
+    // La configuración ON DELETE CASCADE se encargará de borrar las predicciones asociadas
+    const deleteOp = await pool.query("DELETE FROM matches WHERE id = $1", [matchId]);
+
+    if (deleteOp.rowCount === 0) {
+      return res.status(404).json({ message: 'Partido no encontrado.' });
+    }
+
+    res.status(200).json({ message: `El partido ${matchId} y sus predicciones han sido eliminados.` });
+
+  } catch (error) {
+    console.error('Error al eliminar partido:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
@@ -727,7 +1017,7 @@ app.post('/api/matches/:matchId/unlock-score-bet', authMiddleware, async (req, r
 
 // RUTA DE USUARIO: Gastar una llave para un beneficio
 app.post('/api/keys/spend', authMiddleware, async (req, res) => {
-  const { benefit } = req.body;
+  const { benefit, eventId } = req.body;
   const userId = req.user.id;
 
   if (!benefit) {
@@ -738,28 +1028,34 @@ app.post('/api/keys/spend', authMiddleware, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Obtener el perfil del usuario y bloquear la fila para la transacción
     const userResult = await client.query("SELECT role, key_balance FROM users WHERE id = $1 FOR UPDATE", [userId]);
     const user = userResult.rows[0];
 
     switch (benefit) {
-      case 'become_vip':
-        // Verificar que el usuario sea 'player' y tenga suficientes llaves
-        if (user.role !== 'player') {
+      case 'become_vip': {
+        if (!eventId) {
           await client.query('ROLLBACK');
-          return res.status(400).json({ message: 'Ya eres VIP o tienes un rol superior.' });
+          return res.status(400).json({ message: 'Se requiere el ID del evento para volverse VIP.' });
         }
+
         if (user.key_balance < 1) {
           await client.query('ROLLBACK');
           return res.status(400).json({ message: 'No tienes llaves suficientes.' });
         }
 
-        // Actualizar el rol y restar una llave
-        await client.query("UPDATE users SET role = 'vip', key_balance = key_balance - 1 WHERE id = $1", [userId]);
+        const alreadyVip = await client.query('SELECT 1 FROM vip_statuses WHERE user_id = $1 AND event_id = $2', [userId, eventId]);
+        if (alreadyVip.rows.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'Ya eres VIP para este evento.' });
+        }
+
+        await client.query('INSERT INTO vip_statuses (user_id, event_id) VALUES ($1, $2)', [userId, eventId]);
+        await client.query('UPDATE users SET key_balance = key_balance - 1 WHERE id = $1', [userId]);
         
         await client.query('COMMIT');
-        res.status(200).json({ message: '¡Felicidades! Ahora eres un usuario VIP.' });
+        res.status(200).json({ message: '¡Felicidades! Ahora eres VIP para este evento.' });
         break;
+      }
 
       default:
         await client.query('ROLLBACK');
