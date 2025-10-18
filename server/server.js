@@ -715,12 +715,18 @@ app.post('/api/admin/reset-password', authMiddleware, adminAuthMiddleware, async
 // RUTA DE ADMIN: Obtener estadísticas de uso de llaves
 app.get('/api/admin/stats/key-usage', authMiddleware, adminAuthMiddleware, async (req, res) => {
   try {
-    const vipResult = await pool.query('SELECT COUNT(*) FROM vip_statuses');
-    const unlockedResult = await pool.query('SELECT COUNT(*) FROM unlocked_score_bets');
+    const vipByEventResult = await pool.query(`
+      SELECT e.name, COUNT(vs.user_id)::int as vip_count
+      FROM vip_statuses vs
+      JOIN events e ON vs.event_id = e.id
+      GROUP BY e.name
+      ORDER BY vip_count DESC
+    `);
+    const unlockedResult = await pool.query('SELECT COUNT(*)::int FROM unlocked_score_bets');
 
     const stats = {
-      keys_spent_on_vip: parseInt(vipResult.rows[0].count, 10),
-      keys_spent_on_unlocks: parseInt(unlockedResult.rows[0].count, 10),
+      vip_by_event: vipByEventResult.rows,
+      keys_spent_on_unlocks: unlockedResult.rows[0].count,
     };
 
     res.status(200).json(stats);
