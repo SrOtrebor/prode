@@ -10,22 +10,36 @@ const crypto = require('crypto');
 const { calculateMatchPoints } = require('./scoringService');
 require('dotenv').config();
 
-// --- CONFIGURACIÓN DEL SERVIDOR CON SOCKET.IO ---
+// --- CONFIGURACIÓN DEL SERVIDOR Y CORS ---
 const app = express();
 const http = require('http');
 const server = http.createServer(app);
 const { Server } = require("socket.io");
+
+const whitelist = [
+    'https://fulbitoplay.onrender.com',
+    'https://www.fulbitoplay.com.ar',
+    'https://fulbitoplay.com.ar',
+    'http://localhost:5173'
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (whitelist.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+};
+
 const io = new Server(server, {
-  cors: {
-    origin: ['http://localhost:5173', 'https://fulbitoplay.onrender.com'],
-    methods: ["GET", "POST"]
-  }
+  cors: corsOptions
 });
 
 // 2. Crear una instancia de Express
-app.use(cors({
-  origin: ['https://fulbitoplay.onrender.com', 'http://localhost:5173']
-}));
+app.use(cors(corsOptions));
 app.use(express.json());
 const PORT = process.env.PORT || 3001;
 
