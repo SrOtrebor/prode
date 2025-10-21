@@ -8,6 +8,8 @@ const authMiddleware = require('./middleware/auth');
 const adminAuthMiddleware = require('./middleware/adminAuth');
 const crypto = require('crypto');
 const { calculateMatchPoints } = require('./scoringService');
+const { spawn } = require('child_process'); // Importar child_process para ejecutar scripts de Python
+// require('./textParser.js') ya no es necesario.
 require('dotenv').config();
 
 // --- CONFIGURACIÓN DEL SERVIDOR Y CORS ---
@@ -781,7 +783,7 @@ app.post('/api/admin/events', authMiddleware, adminAuthMiddleware, async (req, r
 // RUTA DE ADMIN: Obtener todos los eventos
 app.get('/api/admin/events', authMiddleware, adminAuthMiddleware, async (req, res) => {
   try {
-    const events = await pool.query("SELECT id, name FROM events ORDER BY id DESC");
+    const events = await pool.query("SELECT id, name, status FROM events ORDER BY id DESC");
     res.json(events.rows);
   } catch (error) {
     console.error('Error al obtener eventos:', error);
@@ -917,6 +919,39 @@ app.delete('/api/admin/matches/:matchId', authMiddleware, adminAuthMiddleware, a
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
+
+// RUTA DE ADMIN: Actualizar un partido existente
+app.put('/api/admin/matches/:matchId', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { local_team, visitor_team, match_datetime } = req.body;
+
+    if (!local_team || !visitor_team || !match_datetime) {
+      return res.status(400).json({ message: 'Todos los campos son requeridos.' });
+    }
+
+    // Formatear la fecha para la base de datos
+    const match_datetime_art = `${match_datetime}:00-03:00`;
+
+    const updatedMatch = await pool.query(
+      "UPDATE matches SET local_team = $1, visitor_team = $2, match_datetime = $3 WHERE id = $4 RETURNING *",
+      [local_team, visitor_team, match_datetime_art, matchId]
+    );
+
+    if (updatedMatch.rows.length === 0) {
+      return res.status(404).json({ message: 'Partido no encontrado.' });
+    }
+
+    res.status(200).json({ message: 'Partido actualizado exitosamente.', match: updatedMatch.rows[0] });
+
+  } catch (error) {
+    console.error('Error al actualizar partido:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// La ruta /api/admin/import-fixtures ha sido reemplazada por /api/admin/batch-load-matches
+
 
 // RUTA DE ADMIN: Generar una nueva llave de activación (con cantidad)
 app.post('/api/admin/generate-key', authMiddleware, adminAuthMiddleware, async (req, res) => {
@@ -1147,6 +1182,96 @@ app.get('/api/leaderboard/:eventId', authMiddleware, async (req, res) => {
   }
 });
 
+
+
+// --- INICIO: LÓGICA DE CARGA RÁPIDA ---
+const TEAMS_DICTIONARY = [
+    'Aldosivi', 'Ind. Rivadavia Mza', 'Banfield', 'Lanús', 'Barracas', 'Argentinos Jrs.',
+    'Belgrano', 'Tigre', 'Central Córdoba', 'Racing', 'Defensa', 'Huracán',
+    'Estudiantes', 'Boca Jrs.', 'Godoy Cruz', 'San Martín SJ', 'Independiente', 'At. Tucumán',
+    'Instituto', 'Central', "Newell's", 'Unión', 'Platense', 'Sarmiento',
+    'River', 'Gimnasia LP', 'San Lorenzo', 'Dep. Riestra', 'Vélez', 'Talleres'
+];
+
+app.post('/api/admin/batch-load-matches', authMiddleware, adminAuthMiddleware, async (req, res) => {
+    const { rawText, eventId } = req.body;
+
+    if (!rawText || !eventId) {
+        return res.status(400).json({ message: 'El texto y el ID del evento son requeridos.' });
+    }
+
+    try {
+        const lines = rawText.split('\n').map(line => line.trim()).filter(line => line);
+        const matchesData = [];
+
+        for (const line of lines) {
+            const timeRegex = /^(\d{2}:\d{2})/;
+            const timeMatch = line.match(timeRegex);
+
+            if (!timeMatch) continue; // Ignorar líneas que no empiezan con hora (ej: estadios)
+
+            console.log(`--- Processing line: ${line}`);
+
+            const time = timeMatch[1];
+            const teamsText = line.substring(time.length);
+
+            const parts = teamsText.split(/\s{2,}/);
+            console.log(`Split parts: ${JSON.stringify(parts)}`);
+            if (parts.length < 2) continue; // Si no hay separador de doble espacio, ignorar
+
+            const homeBlock = parts[0];
+            const awayBlock = parts.slice(1).join('  ');
+            console.log(`Home block: ${homeBlock}, Away block: ${awayBlock}`);
+
+            // Usar .find() para encontrar el primer equipo conocido en cada bloque
+            const homeTeam = TEAMS_DICTIONARY.find(team => homeBlock.includes(team));
+            const awayTeam = TEAMS_DICTIONARY.find(team => awayBlock.includes(team));
+            console.log(`Found teams: Home=${homeTeam}, Away=${awayTeam}`);
+
+            if (homeTeam && awayTeam) {
+                const matchDate = '2025-11-02'; // Esto debería ser dinámico
+                const dateTime = `${matchDate}T${time}:00-03:00`;
+                matchesData.push({
+                    eventId,
+                    homeTeam,
+                    awayTeam,
+                    dateTime
+                });
+            }
+        }
+        
+        if (matchesData.length === 0) {
+            return res.status(400).json({ message: 'No se pudieron interpretar partidos del texto. Asegúrate de que el formato sea correcto (ej: HH:MM EquipoLocal  EquipoVisitante).' });
+        }
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            for (const match of matchesData) {
+                await client.query(
+                    `INSERT INTO matches (event_id, local_team, visitor_team, match_datetime)
+                     VALUES ($1, $2, $3, $4)`,
+                    [match.eventId, match.homeTeam, match.awayTeam, match.dateTime]
+                );
+            }
+            await client.query('COMMIT');
+        } catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        } finally {
+            client.release();
+        }
+
+        res.status(201).json({ message: `Se cargaron ${matchesData.length} partidos correctamente.` });
+
+    } catch (error) {
+        console.error('Error en la carga por lotes:', error);
+const errorMessage = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ message: 'Error interno del servidor.', error: errorMessage });
+    }
+});
+
+// --- FIN: LÓGICA DE CARGA RÁPIDA ---
 
 // 5. Iniciar el servidor (SIEMPRE AL FINAL)
 server.listen(PORT, () => {

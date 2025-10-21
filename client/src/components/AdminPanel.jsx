@@ -5,6 +5,7 @@ import EventManager from './EventManager';
 import { useAuth } from '../context/AuthContext';
 import ChatManager from './ChatManager';
 import Prizes from './Prizes';
+import BatchLoadMatches from './admin/BatchLoadMatches';
 
 const adminTitleStyle = "font-display text-xl font-bold mb-4 text-center text-texto-principal uppercase tracking-wider";
 const adminInputStyle = "w-full px-3 py-2 bg-fondo-principal border border-texto-secundario rounded-md text-texto-principal focus:outline-none focus:border-secundario transition-colors";
@@ -75,16 +76,44 @@ const EventCreator = ({ onEventCreated }) => {
 
 const MatchManager = ({ events }) => {
   const [selectedEvent, setSelectedEvent] = useState('');
-  const [localTeam, setLocalTeam] = useState('');
-  const [visitorTeam, setVisitorTeam] = useState('');
-  const [matchDatetime, setMatchDatetime] = useState('');
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  useEffect(() => {
-    if (events.length > 0) setSelectedEvent(events[0].id);
-  }, [events]);
+  // State for the Add New Match form
+  const [newLocalTeam, setNewLocalTeam] = useState('');
+  const [newVisitorTeam, setNewVisitorTeam] = useState('');
+  const [newMatchDatetime, setNewMatchDatetime] = useState('');
 
-  const handleSubmit = async (e) => {
+  // State for inline editing
+  const [editingMatch, setEditingMatch] = useState(null); 
+
+  useEffect(() => {
+    if (events.length > 0 && !selectedEvent) {
+      setSelectedEvent(events[0].id);
+    }
+  }, [events, selectedEvent]);
+
+  useEffect(() => {
+    const fetchMatches = async () => {
+      if (!selectedEvent) return;
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      try {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/matches/${selectedEvent}`, { 
+          headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        setMatches(response.data);
+      } catch (error) {
+        setMessage({ type: 'error', text: 'Error al cargar los partidos.' });
+      }
+      setLoading(false);
+    };
+
+    fetchMatches();
+  }, [selectedEvent]);
+
+  const handleAddMatch = async (e) => {
     e.preventDefault();
     if (!selectedEvent) {
       setMessage({ type: 'error', text: 'Por favor, selecciona un evento.' });
@@ -94,41 +123,115 @@ const MatchManager = ({ events }) => {
     try {
       const payload = { 
         event_id: selectedEvent, 
-        local_team: localTeam, 
-        visitor_team: visitorTeam, 
-        match_datetime: matchDatetime
+        local_team: newLocalTeam, 
+        visitor_team: newVisitorTeam, 
+        match_datetime: newMatchDatetime
       };
       await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/matches`, payload, { headers: { 'Authorization': `Bearer ${token}` } });
       setMessage({ type: 'success', text: '¡Partido agregado exitosamente!' });
-      setLocalTeam('');
-      setVisitorTeam('');
-      setMatchDatetime('');
+      setNewLocalTeam('');
+      setNewVisitorTeam('');
+      setNewMatchDatetime('');
+      // Refresh matches list
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/matches/${selectedEvent}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      setMatches(response.data);
     } catch (error) {
       setMessage({ type: 'error', text: 'Error al agregar el partido.' });
     }
   };
 
+  const handleDeleteMatch = async (matchId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este partido?')) return;
+    const token = localStorage.getItem('token');
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/matches/${matchId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      setMessage({ type: 'success', text: 'Partido eliminado.' });
+      setMatches(matches.filter(m => m.id !== matchId));
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al eliminar el partido.' });
+    }
+  };
+
+  const handleUpdateMatch = async (e) => {
+    e.preventDefault();
+    if (!editingMatch) return;
+    const token = localStorage.getItem('token');
+    try {
+      const payload = { 
+        local_team: editingMatch.local_team, 
+        visitor_team: editingMatch.visitor_team, 
+        match_datetime: editingMatch.match_datetime.substring(0, 16) // Formato para datetime-local
+      };
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/matches/${editingMatch.id}`, payload, { headers: { 'Authorization': `Bearer ${token}` } });
+      setMessage({ type: 'success', text: 'Partido actualizado.' });
+      setEditingMatch(null);
+      // Refresh matches list
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/matches/${selectedEvent}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      setMatches(response.data);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Error al actualizar el partido.' });
+    }
+  };
+
+  const handleEditChange = (e) => {
+    setEditingMatch({ ...editingMatch, [e.target.name]: e.target.value });
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-8">
+      {/* Event Selector */}
       <div>
         <label htmlFor="event-select" className="block text-sm font-bold text-texto-secundario mb-1">Seleccionar Evento</label>
         <select id="event-select" value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)} className={adminSelectStyle}>
           {events.length > 0 ? events.map(event => <option key={event.id} value={event.id}>{event.name}</option>) : <option disabled>No hay eventos disponibles.</option>}
         </select>
       </div>
-      <FormInput id="localTeam" label="Equipo Local" type="text" value={localTeam} onChange={(e) => setLocalTeam(e.target.value)} />
-      <FormInput id="visitorTeam" label="Equipo Visitante" type="text" value={visitorTeam} onChange={(e) => setVisitorTeam(e.target.value)} />
-      <FormInput 
-        id="matchDatetime" 
-        label="Fecha y Hora del Partido" 
-        type="datetime-local" 
-        value={matchDatetime} 
-        onChange={(e) => setMatchDatetime(e.target.value)}
-        required={true} 
-      />
-      <button type="submit" className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full bg-confirmacion">Agregar Partido</button>
-      {message.text && <p className={`mt-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
-    </form>
+
+      {message.text && <p className={`my-4 text-center font-semibold ${message.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{message.text}</p>}
+
+      {/* Matches List */}
+      <div className="space-y-4">
+        <h4 className="text-lg font-display font-semibold text-texto-principal">Partidos del Evento</h4>
+        {loading ? <p>Cargando partidos...</p> : matches.map(match => (
+          <div key={match.id} className="bg-fondo-principal p-4 rounded-lg shadow-md">
+            {editingMatch && editingMatch.id === match.id ? (
+              <form onSubmit={handleUpdateMatch} className="space-y-4">
+                <FormInput id="edit-local" label="Local" type="text" name="local_team" value={editingMatch.local_team} onChange={handleEditChange} />
+                <FormInput id="edit-visitor" label="Visitante" type="text" name="visitor_team" value={editingMatch.visitor_team} onChange={handleEditChange} />
+                <FormInput id="edit-datetime" label="Fecha y Hora" type="datetime-local" name="match_datetime" value={editingMatch.match_datetime.substring(0, 16)} onChange={handleEditChange} />
+                <div className="flex gap-4">
+                  <button type="submit" className={`${adminButtonStyle} w-full bg-confirmacion`}>Guardar</button>
+                  <button type="button" onClick={() => setEditingMatch(null)} className={`${adminButtonStyle} w-full bg-gray-500`}>Cancelar</button>
+                </div>
+              </form>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div className="md:col-span-2">
+                  <p className="font-bold text-texto-principal">{match.local_team} vs {match.visitor_team}</p>
+                  <p className="text-sm text-texto-secundario">{new Date(match.match_datetime).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</p>
+                </div>
+                <div className="flex gap-2 md:justify-end">
+                  <button onClick={() => setEditingMatch(match)} className={`${adminButtonStyle} bg-secundario text-black text-sm`}>Editar</button>
+                  <button onClick={() => handleDeleteMatch(match.id)} className={`${adminButtonStyle} bg-primario text-sm`}>Eliminar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {matches.length === 0 && !loading && <p>No hay partidos para este evento.</p>}
+      </div>
+
+      {/* Add Match Form */}
+      <div className="border-t border-texto-secundario/20 pt-8">
+        <h4 className="text-lg font-display font-semibold text-texto-principal mb-4">Agregar Nuevo Partido</h4>
+        <form onSubmit={handleAddMatch} className="space-y-4">
+          <FormInput id="newLocalTeam" label="Equipo Local" type="text" value={newLocalTeam} onChange={(e) => setNewLocalTeam(e.target.value)} />
+          <FormInput id="newVisitorTeam" label="Equipo Visitante" type="text" value={newVisitorTeam} onChange={(e) => setNewVisitorTeam(e.target.value)} />
+          <FormInput id="newMatchDatetime" label="Fecha y Hora del Partido" type="datetime-local" value={newMatchDatetime} onChange={(e) => setNewMatchDatetime(e.target.value)} />
+          <button type="submit" className={`${adminButtonStyle} w-full bg-confirmacion`}>Agregar Partido</button>
+        </form>
+      </div>
+    </div>
   );
 };
 
@@ -426,6 +529,8 @@ const PasswordResetter = () => {
 };
 
 
+
+
 // COMPONENTE PRINCIPAL
 function AdminPanel({ onLeaderboardUpdate }) {
   const { user: authInfo } = useAuth();
@@ -476,6 +581,7 @@ function AdminPanel({ onLeaderboardUpdate }) {
       case 'chat': return <ChatManager />;
       case 'premios': return <Prizes />;
       case 'resetPassword': return <PasswordResetter />;
+      case 'batchLoad': return <BatchLoadMatches />;
       default: return null;
     }
   };
@@ -499,6 +605,7 @@ function AdminPanel({ onLeaderboardUpdate }) {
         <TabButton tabName="chat">Chat</TabButton>
         <TabButton tabName="premios">Premios</TabButton>
         <TabButton tabName="resetPassword">Reset Pass</TabButton>
+        <TabButton tabName="batchLoad">Carga Rápida</TabButton>
       </div>
       <div className="max-w-lg mx-auto">
         {renderActiveTab()}

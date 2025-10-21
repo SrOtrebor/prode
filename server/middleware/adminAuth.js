@@ -14,6 +14,7 @@ module.exports = async function(req, res, next) {
 
     next(); // Si es admin, dejamos pasar.
   } catch (error) {
-    res.status(500).json({ message: 'Error interno del servidor.' });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ message: 'Error interno del servidor en middleware.', error: errorMessage });
   }
 };
