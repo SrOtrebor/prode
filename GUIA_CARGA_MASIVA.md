@@ -2,35 +2,91 @@
 
 ## 📝 Formatos Soportados
 
-El sistema acepta los siguientes formatos de texto:
+El sistema acepta los siguientes formatos de texto **Y JSON**:
 
-### Formato 1: Fecha completa + Hora + vs
+### **Formatos de Texto**
+
+#### Formato 1: Fecha completa + Hora + vs
 ```
 22/01/2026 20:00 River Plate vs Boca Juniors
 22/01/2026 22:00 Racing Club vs Independiente
 23/01/2026 18:00 San Lorenzo vs Huracán
 ```
 
-### Formato 2: Fecha completa + Hora + guión
+#### Formato 2: Fecha completa + Hora + guión
 ```
 22/01/2026 20:00 River Plate - Boca Juniors
 22/01/2026 22:00 Racing Club - Independiente
 23/01/2026 18:00 San Lorenzo - Huracán
 ```
 
-### Formato 3: Solo hora + vs (usa fecha actual)
+#### Formato 3: Solo hora + vs (usa fecha actual)
 ```
 20:00 River Plate vs Boca Juniors
 22:00 Racing Club vs Independiente
 18:00 San Lorenzo vs Huracán
 ```
 
-### Formato 4: Solo hora + guión (usa fecha actual)
+#### Formato 4: Solo hora + guión (usa fecha actual)
 ```
 20:00 River Plate - Boca Juniors
 22:00 Racing Club - Independiente
 18:00 San Lorenzo - Huracán
 ```
+
+### **Formatos JSON**
+
+#### Formato 5: JSON con fecha ISO completa
+```json
+[
+  {
+    "homeTeam": "River Plate",
+    "awayTeam": "Boca Juniors",
+    "dateTime": "2026-01-22T20:00:00-03:00"
+  },
+  {
+    "homeTeam": "Racing Club",
+    "awayTeam": "Independiente",
+    "dateTime": "2026-01-22T22:00:00-03:00"
+  }
+]
+```
+
+#### Formato 6: JSON con fecha y hora separadas
+```json
+[
+  {
+    "homeTeam": "River Plate",
+    "awayTeam": "Boca Juniors",
+    "date": "22/01/2026",
+    "time": "20:00"
+  },
+  {
+    "homeTeam": "Racing Club",
+    "awayTeam": "Independiente",
+    "date": "22/01/2026",
+    "time": "22:00"
+  }
+]
+```
+
+#### Formato 7: JSON solo con hora (usa fecha actual)
+```json
+[
+  {
+    "homeTeam": "River Plate",
+    "awayTeam": "Boca Juniors",
+    "time": "20:00"
+  },
+  {
+    "homeTeam": "Racing Club",
+    "awayTeam": "Independiente",
+    "time": "22:00"
+  }
+]
+```
+
+**Nota**: También puedes enviar un objeto JSON único (sin array) si solo quieres cargar un partido.
 
 ## 🎯 Cómo Usar
 

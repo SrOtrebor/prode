@@ -19,10 +19,10 @@ const server = http.createServer(app);
 const { Server } = require("socket.io");
 
 const whitelist = [
-    'https://fulbitoplay.onrender.com',
-    'https://www.fulbitoplay.com.ar',
-    'https://fulbitoplay.com.ar',
-    'http://localhost:5173'
+  'https://fulbitoplay.onrender.com',
+  'https://www.fulbitoplay.com.ar',
+  'https://fulbitoplay.com.ar',
+  'http://localhost:5173'
 ];
 
 const corsOptions = {
@@ -56,8 +56,8 @@ app.get('/', async (req, res) => {
     const client = await pool.connect();
     const result = await client.query('SELECT NOW()');
     res.json({
-        message: '¡Conexión a la base de datos exitosa!',
-        database_time: result.rows[0].now
+      message: '¡Conexión a la base de datos exitosa!',
+      database_time: result.rows[0].now
     });
     client.release();
   } catch (err) {
@@ -234,7 +234,7 @@ app.get('/api/events/:id', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const { id: eventId } = req.params;
-    
+
     const eventResult = await pool.query("SELECT * FROM events WHERE id = $1", [eventId]);
 
     if (eventResult.rows.length === 0) {
@@ -406,7 +406,7 @@ app.post('/api/events/:eventId/calculate', authMiddleware, adminAuthMiddleware, 
 
     // 2. Obtenemos todas las predicciones para este evento
     const predictionsResult = await client.query('SELECT id, user_id, match_id, prediction_main, predicted_score_local, predicted_score_visitor FROM predictions WHERE match_id = ANY($1::int[])', [Object.keys(realResults)]);
-    
+
     // 3. Calculamos los puntos para cada predicción
     for (const pred of predictionsResult.rows) {
       const matchResult = realResults[pred.match_id];
@@ -424,21 +424,21 @@ app.post('/api/events/:eventId/calculate', authMiddleware, adminAuthMiddleware, 
         // Comparamos L/E/V -> 1 punto
         if (pred.prediction_main === realOutcome) {
           points += 1;
-          
+
           // Si acertó L/E/V, revisamos si acertó el resultado exacto -> 2 puntos extra
           if (pred.predicted_score_local === matchResult.local && pred.predicted_score_visitor === matchResult.visitor) {
             points += 2; // <-- CAMBIO APLICADO
           }
         }
       }
-      
+
       // 4. Actualizamos la predicción con los puntos obtenidos
       await client.query('UPDATE predictions SET points_obtained = $1 WHERE id = $2', [points, pred.id]);
     }
 
     // Cambiamos el estado del evento a 'finished'
     await client.query("UPDATE events SET status = 'finished' WHERE id = $1", [eventId]);
-    
+
     await client.query('COMMIT');
     res.status(200).json({ message: `Puntos para el evento ${eventId} calculados exitosamente.` });
 
@@ -453,19 +453,19 @@ app.post('/api/events/:eventId/calculate', authMiddleware, adminAuthMiddleware, 
 
 // Ruta protegida para obtener los últimos mensajes del chat
 app.get('/api/chat/messages', authMiddleware, async (req, res) => {
-    try {
-      const messagesResult = await pool.query(`
+  try {
+    const messagesResult = await pool.query(`
         SELECT cm.id, cm.message_content, cm.created_at, u.username, u.role 
         FROM chat_messages cm
         JOIN users u ON cm.user_id = u.id
         ORDER BY cm.created_at DESC
         LIMIT 50
       `);
-      const orderedMessages = messagesResult.rows.reverse();
-      res.json(orderedMessages);
-    } catch (error) {
-      res.status(500).json({ message: 'Error interno del servidor.' });
-    }
+    const orderedMessages = messagesResult.rows.reverse();
+    res.json(orderedMessages);
+  } catch (error) {
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
 });
 
 io.on('connection', (socket) => {
@@ -477,48 +477,48 @@ io.on('connection', (socket) => {
 
 // Ruta protegida para enviar un nuevo mensaje al chat
 app.post('/api/chat/messages', authMiddleware, async (req, res) => {
-    try {
-      const { message_content } = req.body;
-      const userId = req.user.id;
+  try {
+    const { message_content } = req.body;
+    const userId = req.user.id;
 
-      // Verificar si el usuario está silenciado
-      const userCheckResult = await pool.query('SELECT username, role, is_muted FROM users WHERE id = $1', [userId]);
-      const user = userCheckResult.rows[0];
+    // Verificar si el usuario está silenciado
+    const userCheckResult = await pool.query('SELECT username, role, is_muted FROM users WHERE id = $1', [userId]);
+    const user = userCheckResult.rows[0];
 
-      if (user.is_muted) {
-        return res.status(403).json({ message: 'No puedes enviar mensajes porque has sido silenciado.' });
-      }
-
-      if (!message_content || message_content.trim() === '') {
-        return res.status(400).json({ message: 'El contenido del mensaje no puede estar vacío.' });
-      }
-
-      const newMessageResult = await pool.query(
-        "INSERT INTO chat_messages (user_id, message_content) VALUES ($1, $2) RETURNING id, created_at, message_content",
-        [userId, message_content]
-      );
-
-      const finalMessage = {
-        ...newMessageResult.rows[0],
-        username: user.username,
-        role: user.role
-      };
-
-      // Emitir el nuevo mensaje a todos los clientes conectados
-      io.emit('new_message', finalMessage);
-
-      res.status(201).json(finalMessage);
-    } catch (error) {
-      console.error('Error al enviar mensaje de chat:', error);
-      res.status(500).json({ message: 'Error interno del servidor.' });
+    if (user.is_muted) {
+      return res.status(403).json({ message: 'No puedes enviar mensajes porque has sido silenciado.' });
     }
+
+    if (!message_content || message_content.trim() === '') {
+      return res.status(400).json({ message: 'El contenido del mensaje no puede estar vacío.' });
+    }
+
+    const newMessageResult = await pool.query(
+      "INSERT INTO chat_messages (user_id, message_content) VALUES ($1, $2) RETURNING id, created_at, message_content",
+      [userId, message_content]
+    );
+
+    const finalMessage = {
+      ...newMessageResult.rows[0],
+      username: user.username,
+      role: user.role
+    };
+
+    // Emitir el nuevo mensaje a todos los clientes conectados
+    io.emit('new_message', finalMessage);
+
+    res.status(201).json(finalMessage);
+  } catch (error) {
+    console.error('Error al enviar mensaje de chat:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
 });
 
 // RUTA DE ADMIN: Borrar todos los mensajes del chat
 app.delete('/api/admin/chat/messages', authMiddleware, adminAuthMiddleware, async (req, res) => {
   try {
     await pool.query('TRUNCATE TABLE chat_messages RESTART IDENTITY');
-    
+
     // Emitir un evento a todos los clientes para que limpien su chat
     io.emit('chat_cleared');
 
@@ -829,7 +829,7 @@ app.get('/api/admin/matches/:eventId', authMiddleware, adminAuthMiddleware, asyn
 
 // RUTA DE ADMIN: Guardar los resultados de los partidos de un evento
 app.post('/api/admin/results', authMiddleware, adminAuthMiddleware, async (req, res) => {
-  const { results } = req.body; 
+  const { results } = req.body;
 
   if (!results || !Array.isArray(results) || results.length === 0) {
     return res.status(400).json({ message: 'No se enviaron resultados válidos.' });
@@ -952,16 +952,94 @@ app.put('/api/admin/matches/:matchId', authMiddleware, adminAuthMiddleware, asyn
 
 // FUNCIÓN AUXILIAR: Parsear texto de partidos
 function parseMatchesFromText(rawText, eventId) {
-  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   const matches = [];
   const errors = [];
+
+  // Intentar parsear como JSON primero
+  let isJSON = false;
+  try {
+    const trimmedText = rawText.trim();
+    if (trimmedText.startsWith('[') || trimmedText.startsWith('{')) {
+      const jsonData = JSON.parse(trimmedText);
+      isJSON = true;
+
+      // Si es un objeto único, convertirlo a array
+      const matchesArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+
+      for (let i = 0; i < matchesArray.length; i++) {
+        const item = matchesArray[i];
+
+        // Validar campos requeridos
+        if (!item.homeTeam || !item.awayTeam) {
+          errors.push(`Item ${i + 1}: Faltan campos requeridos (homeTeam, awayTeam)`);
+          continue;
+        }
+
+        let dateTimeStr;
+
+        // Si tiene fecha completa en formato ISO
+        if (item.dateTime) {
+          // Aceptar formato ISO o convertir
+          dateTimeStr = item.dateTime;
+          if (!dateTimeStr.includes('T')) {
+            errors.push(`Item ${i + 1}: Formato de fecha inválido. Use ISO 8601 o separe fecha y hora`);
+            continue;
+          }
+          // Asegurar zona horaria Argentina si no la tiene
+          if (!dateTimeStr.includes('-03:00') && !dateTimeStr.includes('Z')) {
+            dateTimeStr = dateTimeStr.replace(/:\d{2}$/, ':00-03:00');
+          }
+        }
+        // Si tiene fecha y hora separadas
+        else if (item.date && item.time) {
+          const dateMatch = item.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          const timeMatch = item.time.match(/^(\d{1,2}):(\d{2})$/);
+
+          if (!dateMatch || !timeMatch) {
+            errors.push(`Item ${i + 1}: Formato de fecha/hora inválido`);
+            continue;
+          }
+
+          const [, day, month, year] = dateMatch;
+          dateTimeStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${item.time}:00-03:00`;
+        }
+        // Si solo tiene hora, usar fecha actual
+        else if (item.time) {
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const day = String(now.getDate()).padStart(2, '0');
+          dateTimeStr = `${year}-${month}-${day}T${item.time}:00-03:00`;
+        }
+        else {
+          errors.push(`Item ${i + 1}: Falta información de fecha/hora (dateTime, date+time, o time)`);
+          continue;
+        }
+
+        matches.push({
+          eventId,
+          homeTeam: item.homeTeam.trim(),
+          awayTeam: item.awayTeam.trim(),
+          dateTime: dateTimeStr
+        });
+      }
+
+      return { matches, errors };
+    }
+  } catch (e) {
+    // No es JSON válido, continuar con parseo de texto
+    isJSON = false;
+  }
+
+  // Si no es JSON, parsear como texto línea por línea
+  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
   // Patrones regex para diferentes formatos
   // Formato 1: "DD/MM/YYYY HH:MM Equipo1 vs Equipo2"
   // Formato 2: "DD/MM/YYYY HH:MM Equipo1 - Equipo2"
   // Formato 3: "HH:MM Equipo1 vs Equipo2" (sin fecha, usa fecha actual)
   // Formato 4: "HH:MM Equipo1 - Equipo2"
-  
+
   const pattern1 = /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})\s+(.+?)\s+(?:vs|VS|-)\s+(.+)$/;
   const pattern2 = /^(\d{1,2}:\d{2})\s+(.+?)\s+(?:vs|VS|-)\s+(.+)$/;
 
@@ -975,7 +1053,7 @@ function parseMatchesFromText(rawText, eventId) {
       const [, dateStr, timeStr, homeTeam, awayTeam] = parsed;
       const [day, month, year] = dateStr.split('/');
       const dateTimeStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00-03:00`;
-      
+
       match = {
         eventId,
         homeTeam: homeTeam.trim(),
@@ -993,7 +1071,7 @@ function parseMatchesFromText(rawText, eventId) {
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
         const dateTimeStr = `${year}-${month}-${day}T${timeStr}:00-03:00`;
-        
+
         match = {
           eventId,
           homeTeam: homeTeam.trim(),
@@ -1017,10 +1095,10 @@ function parseMatchesFromText(rawText, eventId) {
 app.post('/api/admin/batch-load-matches', authMiddleware, adminAuthMiddleware, async (req, res) => {
   try {
     const { rawText, eventId } = req.body;
-    
+
     if (!rawText || !eventId) {
-      return res.status(400).json({ 
-        message: 'Se requiere el texto de partidos y el ID del evento.' 
+      return res.status(400).json({
+        message: 'Se requiere el texto de partidos y el ID del evento.'
       });
     }
 
@@ -1032,9 +1110,9 @@ app.post('/api/admin/batch-load-matches', authMiddleware, adminAuthMiddleware, a
 
     // Parsear el texto para extraer partidos
     const { matches: matchesData, errors } = parseMatchesFromText(rawText, eventId);
-    
+
     if (matchesData.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'No se pudieron extraer partidos del texto proporcionado.',
         error: errors.length > 0 ? errors.join('\n') : 'Formato de texto no reconocido'
       });
@@ -1044,7 +1122,7 @@ app.post('/api/admin/batch-load-matches', authMiddleware, adminAuthMiddleware, a
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       for (const match of matchesData) {
         await client.query(
           `INSERT INTO matches (event_id, local_team, visitor_team, match_datetime)
@@ -1052,33 +1130,33 @@ app.post('/api/admin/batch-load-matches', authMiddleware, adminAuthMiddleware, a
           [match.eventId, match.homeTeam, match.awayTeam, match.dateTime]
         );
       }
-      
+
       await client.query('COMMIT');
-      
+
       let message = `Se cargaron ${matchesData.length} partidos correctamente.`;
       if (errors.length > 0) {
         message += ` (${errors.length} líneas no pudieron ser procesadas)`;
       }
-      
-      res.status(201).json({ 
+
+      res.status(201).json({
         message,
         loaded: matchesData.length,
         errors: errors.length > 0 ? errors : undefined
       });
-      
+
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
       client.release();
     }
-    
+
   } catch (error) {
     console.error('Error en la carga por lotes:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ 
-      message: 'Error interno del servidor.', 
-      error: errorMessage 
+    res.status(500).json({
+      message: 'Error interno del servidor.',
+      error: errorMessage
     });
   }
 });
@@ -1100,7 +1178,7 @@ app.post('/api/admin/generate-key', authMiddleware, adminAuthMiddleware, async (
     res.status(201).json(result.rows[0]);
 
   } catch (error) {
-    if (error.code === '23505') { 
+    if (error.code === '23505') {
       return res.status(500).json({ message: 'Error al generar la llave, por favor inténtalo de nuevo.' });
     }
     console.error('Error al generar la llave:', error);
@@ -1131,7 +1209,7 @@ app.post('/api/keys/redeem', authMiddleware, async (req, res) => {
       client.release();
       return res.status(404).json({ message: 'La llave es inválida o ya ha sido utilizada.' });
     }
-    
+
     const key = keyResult.rows[0];
     const keyQuantity = key.quantity;
 
@@ -1264,7 +1342,7 @@ app.post('/api/keys/spend', authMiddleware, async (req, res) => {
 
         await client.query('INSERT INTO vip_statuses (user_id, event_id) VALUES ($1, $2)', [userId, eventId]);
         await client.query('UPDATE users SET key_balance = key_balance - 1 WHERE id = $1', [userId]);
-        
+
         await client.query('COMMIT');
         res.status(200).json({ message: '¡Felicidades! Ahora eres VIP para este evento.' });
         break;
@@ -1317,89 +1395,89 @@ app.get('/api/leaderboard/:eventId', authMiddleware, async (req, res) => {
 
 // --- INICIO: LÓGICA DE CARGA RÁPIDA ---
 const TEAMS_DICTIONARY = [
-    'Aldosivi', 'Ind. Rivadavia Mza', 'Banfield', 'Lanús', 'Barracas', 'Argentinos Jrs.',
-    'Belgrano', 'Tigre', 'Central Córdoba', 'Racing', 'Defensa', 'Huracán',
-    'Estudiantes', 'Boca Jrs.', 'Godoy Cruz', 'San Martín SJ', 'Independiente', 'At. Tucumán',
-    'Instituto', 'Central', "Newell's", 'Unión', 'Platense', 'Sarmiento',
-    'River', 'Gimnasia LP', 'San Lorenzo', 'Dep. Riestra', 'Vélez', 'Talleres'
+  'Aldosivi', 'Ind. Rivadavia Mza', 'Banfield', 'Lanús', 'Barracas', 'Argentinos Jrs.',
+  'Belgrano', 'Tigre', 'Central Córdoba', 'Racing', 'Defensa', 'Huracán',
+  'Estudiantes', 'Boca Jrs.', 'Godoy Cruz', 'San Martín SJ', 'Independiente', 'At. Tucumán',
+  'Instituto', 'Central', "Newell's", 'Unión', 'Platense', 'Sarmiento',
+  'River', 'Gimnasia LP', 'San Lorenzo', 'Dep. Riestra', 'Vélez', 'Talleres'
 ];
 
 app.post('/api/admin/batch-load-matches', authMiddleware, adminAuthMiddleware, async (req, res) => {
-    const { rawText, eventId } = req.body;
+  const { rawText, eventId } = req.body;
 
-    if (!rawText || !eventId) {
-        return res.status(400).json({ message: 'El texto y el ID del evento son requeridos.' });
+  if (!rawText || !eventId) {
+    return res.status(400).json({ message: 'El texto y el ID del evento son requeridos.' });
+  }
+
+  try {
+    const lines = rawText.split('\n').map(line => line.trim()).filter(line => line);
+    const matchesData = [];
+
+    for (const line of lines) {
+      const timeRegex = /^(\d{2}:\d{2})/;
+      const timeMatch = line.match(timeRegex);
+
+      if (!timeMatch) continue; // Ignorar líneas que no empiezan con hora (ej: estadios)
+
+      console.log(`--- Processing line: ${line}`);
+
+      const time = timeMatch[1];
+      const teamsText = line.substring(time.length);
+
+      const parts = teamsText.split(/\s{2,}/);
+      console.log(`Split parts: ${JSON.stringify(parts)}`);
+      if (parts.length < 2) continue; // Si no hay separador de doble espacio, ignorar
+
+      const homeBlock = parts[0];
+      const awayBlock = parts.slice(1).join('  ');
+      console.log(`Home block: ${homeBlock}, Away block: ${awayBlock}`);
+
+      // Usar .find() para encontrar el primer equipo conocido en cada bloque
+      const homeTeam = TEAMS_DICTIONARY.find(team => homeBlock.includes(team));
+      const awayTeam = TEAMS_DICTIONARY.find(team => awayBlock.includes(team));
+      console.log(`Found teams: Home=${homeTeam}, Away=${awayTeam}`);
+
+      if (homeTeam && awayTeam) {
+        const matchDate = '2025-11-02'; // Esto debería ser dinámico
+        const dateTime = `${matchDate}T${time}:00-03:00`;
+        matchesData.push({
+          eventId,
+          homeTeam,
+          awayTeam,
+          dateTime
+        });
+      }
     }
 
+    if (matchesData.length === 0) {
+      return res.status(400).json({ message: 'No se pudieron interpretar partidos del texto. Asegúrate de que el formato sea correcto (ej: HH:MM EquipoLocal  EquipoVisitante).' });
+    }
+
+    const client = await pool.connect();
     try {
-        const lines = rawText.split('\n').map(line => line.trim()).filter(line => line);
-        const matchesData = [];
-
-        for (const line of lines) {
-            const timeRegex = /^(\d{2}:\d{2})/;
-            const timeMatch = line.match(timeRegex);
-
-            if (!timeMatch) continue; // Ignorar líneas que no empiezan con hora (ej: estadios)
-
-            console.log(`--- Processing line: ${line}`);
-
-            const time = timeMatch[1];
-            const teamsText = line.substring(time.length);
-
-            const parts = teamsText.split(/\s{2,}/);
-            console.log(`Split parts: ${JSON.stringify(parts)}`);
-            if (parts.length < 2) continue; // Si no hay separador de doble espacio, ignorar
-
-            const homeBlock = parts[0];
-            const awayBlock = parts.slice(1).join('  ');
-            console.log(`Home block: ${homeBlock}, Away block: ${awayBlock}`);
-
-            // Usar .find() para encontrar el primer equipo conocido en cada bloque
-            const homeTeam = TEAMS_DICTIONARY.find(team => homeBlock.includes(team));
-            const awayTeam = TEAMS_DICTIONARY.find(team => awayBlock.includes(team));
-            console.log(`Found teams: Home=${homeTeam}, Away=${awayTeam}`);
-
-            if (homeTeam && awayTeam) {
-                const matchDate = '2025-11-02'; // Esto debería ser dinámico
-                const dateTime = `${matchDate}T${time}:00-03:00`;
-                matchesData.push({
-                    eventId,
-                    homeTeam,
-                    awayTeam,
-                    dateTime
-                });
-            }
-        }
-        
-        if (matchesData.length === 0) {
-            return res.status(400).json({ message: 'No se pudieron interpretar partidos del texto. Asegúrate de que el formato sea correcto (ej: HH:MM EquipoLocal  EquipoVisitante).' });
-        }
-
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-            for (const match of matchesData) {
-                await client.query(
-                    `INSERT INTO matches (event_id, local_team, visitor_team, match_datetime)
+      await client.query('BEGIN');
+      for (const match of matchesData) {
+        await client.query(
+          `INSERT INTO matches (event_id, local_team, visitor_team, match_datetime)
                      VALUES ($1, $2, $3, $4)`,
-                    [match.eventId, match.homeTeam, match.awayTeam, match.dateTime]
-                );
-            }
-            await client.query('COMMIT');
-        } catch (e) {
-            await client.query('ROLLBACK');
-            throw e;
-        } finally {
-            client.release();
-        }
-
-        res.status(201).json({ message: `Se cargaron ${matchesData.length} partidos correctamente.` });
-
-    } catch (error) {
-        console.error('Error en la carga por lotes:', error);
-const errorMessage = error instanceof Error ? error.message : String(error);
-        res.status(500).json({ message: 'Error interno del servidor.', error: errorMessage });
+          [match.eventId, match.homeTeam, match.awayTeam, match.dateTime]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
     }
+
+    res.status(201).json({ message: `Se cargaron ${matchesData.length} partidos correctamente.` });
+
+  } catch (error) {
+    console.error('Error en la carga por lotes:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ message: 'Error interno del servidor.', error: errorMessage });
+  }
 });
 
 // --- FIN: LÓGICA DE CARGA RÁPIDA ---
