@@ -952,143 +952,174 @@ app.put('/api/admin/matches/:matchId', authMiddleware, adminAuthMiddleware, asyn
 
 // FUNCIÓN AUXILIAR: Parsear texto de partidos
 function parseMatchesFromText(rawText, eventId) {
-  const matches = [];
-  const errors = [];
+    const matches = [];
+    const errors = [];
 
-  // Intentar parsear como JSON primero
-  let isJSON = false;
-  try {
-    const trimmedText = rawText.trim();
-    if (trimmedText.startsWith('[') || trimmedText.startsWith('{')) {
-      const jsonData = JSON.parse(trimmedText);
-      isJSON = true;
+    // Intentar parsear como JSON primero
+    let isJSON = false;
+    try {
+        const trimmedText = rawText.trim();
+        if (trimmedText.startsWith('[') || trimmedText.startsWith('{')) {
+            const jsonData = JSON.parse(trimmedText);
+            isJSON = true;
 
-      // Si es un objeto único, convertirlo a array
-      const matchesArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+            const matchesArray = Array.isArray(jsonData) ? jsonData : [jsonData];
 
-      for (let i = 0; i < matchesArray.length; i++) {
-        const item = matchesArray[i];
+            for (let i = 0; i < matchesArray.length; i++) {
+                const item = matchesArray[i];
 
-        // Validar campos requeridos
-        if (!item.homeTeam || !item.awayTeam) {
-          errors.push(`Item ${i + 1}: Faltan campos requeridos (homeTeam, awayTeam)`);
-          continue;
+                if (!item.homeTeam || !item.awayTeam) {
+                    errors.push(`Item ${i + 1}: Faltan campos requeridos (homeTeam, awayTeam)`);
+                    continue;
+                }
+
+                let dateTimeStr;
+
+                if (item.dateTime) {
+                    dateTimeStr = item.dateTime;
+                    if (!dateTimeStr.includes('T')) {
+                        errors.push(`Item ${i + 1}: Formato de fecha inválido`);
+                        continue;
+                    }
+                    if (!dateTimeStr.includes('-03:00') && !dateTimeStr.includes('Z')) {
+                        dateTimeStr = dateTimeStr.replace(/:\d{2}$/, ':00-03:00');
+                    }
+                }
+                else if (item.date && item.time) {
+                    const dateMatch = item.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                    if (!dateMatch) {
+                        errors.push(`Item ${i + 1}: Formato de fecha inválido`);
+                        continue;
+                    }
+                    const [, day, month, year] = dateMatch;
+                    dateTimeStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${item.time}:00-03:00`;
+                }
+                else if (item.time) {
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    dateTimeStr = `${year}-${month}-${day}T${item.time}:00-03:00`;
+                }
+                else {
+                    errors.push(`Item ${i + 1}: Falta información de fecha/hora`);
+                    continue;
+                }
+
+                matches.push({
+                    eventId,
+                    homeTeam: item.homeTeam.trim(),
+                    awayTeam: item.awayTeam.trim(),
+                    dateTime: dateTimeStr
+                });
+            }
+
+            return { matches, errors };
         }
+    } catch (e) {
+        isJSON = false;
+    }
 
-        let dateTimeStr;
+    // Parsear como texto
+    const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
-        // Si tiene fecha completa en formato ISO
-        if (item.dateTime) {
-          // Aceptar formato ISO o convertir
-          dateTimeStr = item.dateTime;
-          if (!dateTimeStr.includes('T')) {
-            errors.push(`Item ${i + 1}: Formato de fecha inválido. Use ISO 8601 o separe fecha y hora`);
+    // Mapa de meses en español
+    const mesesES = {
+        'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
+        'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
+        'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+    };
+
+    let currentDate = null;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        let match = null;
+
+        // Detectar línea de fecha: "Jueves 22 de enero"
+        const dateLinePattern = /^(?:Lunes|Martes|Miércoles|Miercoles|Jueves|Viernes|Sábado|Sabado|Domingo)\s+(\d{1,2})\s+de\s+(\w+)(?:\s+de\s+(\d{4}))?/i;
+        const dateLineMatch = line.match(dateLinePattern);
+
+        if (dateLineMatch) {
+            const day = dateLineMatch[1];
+            const monthName = dateLineMatch[2].toLowerCase();
+            const year = dateLineMatch[3] || new Date().getFullYear();
+            const month = mesesES[monthName];
+
+            if (month) {
+                currentDate = {
+                    day: day.padStart(2, '0'),
+                    month: String(month).padStart(2, '0'),
+                    year: year
+                };
+            }
             continue;
-          }
-          // Asegurar zona horaria Argentina si no la tiene
-          if (!dateTimeStr.includes('-03:00') && !dateTimeStr.includes('Z')) {
-            dateTimeStr = dateTimeStr.replace(/:\d{2}$/, ':00-03:00');
-          }
-        }
-        // Si tiene fecha y hora separadas
-        else if (item.date && item.time) {
-          const dateMatch = item.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-          const timeMatch = item.time.match(/^(\d{1,2}):(\d{2})$/);
-
-          if (!dateMatch || !timeMatch) {
-            errors.push(`Item ${i + 1}: Formato de fecha/hora inválido`);
-            continue;
-          }
-
-          const [, day, month, year] = dateMatch;
-          dateTimeStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${item.time}:00-03:00`;
-        }
-        // Si solo tiene hora, usar fecha actual
-        else if (item.time) {
-          const now = new Date();
-          const year = now.getFullYear();
-          const month = String(now.getMonth() + 1).padStart(2, '0');
-          const day = String(now.getDate()).padStart(2, '0');
-          dateTimeStr = `${year}-${month}-${day}T${item.time}:00-03:00`;
-        }
-        else {
-          errors.push(`Item ${i + 1}: Falta información de fecha/hora (dateTime, date+time, o time)`);
-          continue;
         }
 
-        matches.push({
-          eventId,
-          homeTeam: item.homeTeam.trim(),
-          awayTeam: item.awayTeam.trim(),
-          dateTime: dateTimeStr
-        });
-      }
+        // Patrón con pipe: "15:00 | Aldosivi vs. Defensa y Justicia"
+        const pipePattern = /^(\d{1,2}:\d{2})\s*\|\s*(.+?)\s+(?:vs\.?|VS\.?|-)\s+(.+?)(?:\s*[-–(].*)?$/;
+        const pipeParsed = line.match(pipePattern);
 
-      return { matches, errors };
-    }
-  } catch (e) {
-    // No es JSON válido, continuar con parseo de texto
-    isJSON = false;
-  }
+        if (pipeParsed) {
+            const timeStr = pipeParsed[1];
+            let homeTeam = pipeParsed[2].trim();
+            let awayTeam = pipeParsed[3].trim();
 
-  // Si no es JSON, parsear como texto línea por línea
-  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            // Limpiar paréntesis y guiones al final
+            homeTeam = homeTeam.replace(/\s*\([^)]*\)\s*$/, '').trim();
+            awayTeam = awayTeam.split(/\s*[-–(]/)[0].trim();
 
-  // Patrones regex para diferentes formatos
-  // Formato 1: "DD/MM/YYYY HH:MM Equipo1 vs Equipo2"
-  // Formato 2: "DD/MM/YYYY HH:MM Equipo1 - Equipo2"
-  // Formato 3: "HH:MM Equipo1 vs Equipo2" (sin fecha, usa fecha actual)
-  // Formato 4: "HH:MM Equipo1 - Equipo2"
+            if (currentDate) {
+                const dateTimeStr = `${currentDate.year}-${currentDate.month}-${currentDate.day}T${timeStr}:00-03:00`;
+                match = { eventId, homeTeam, awayTeam, dateTime: dateTimeStr };
+            } else {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const dateTimeStr = `${year}-${month}-${day}T${timeStr}:00-03:00`;
+                match = { eventId, homeTeam, awayTeam, dateTime: dateTimeStr };
+            }
+        } else {
+            // Formatos anteriores
+            const pattern1 = /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})\s+(.+?)\s+(?:vs|VS|-)\s+(.+)$/;
+            const parsed1 = line.match(pattern1);
 
-  const pattern1 = /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})\s+(.+?)\s+(?:vs|VS|-)\s+(.+)$/;
-  const pattern2 = /^(\d{1,2}:\d{2})\s+(.+?)\s+(?:vs|VS|-)\s+(.+)$/;
+            if (parsed1) {
+                const [, dateStr, timeStr, homeTeam, awayTeam] = parsed1;
+                const [day, month, year] = dateStr.split('/');
+                const dateTimeStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00-03:00`;
+                match = { eventId, homeTeam: homeTeam.trim(), awayTeam: awayTeam.trim(), dateTime: dateTimeStr };
+            } else {
+                const pattern2 = /^(\d{1,2}:\d{2})\s+(.+?)\s+(?:vs|VS|-)\s+(.+)$/;
+                const parsed2 = line.match(pattern2);
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    let match = null;
+                if (parsed2) {
+                    const [, timeStr, homeTeam, awayTeam] = parsed2;
 
-    // Intentar con formato completo (fecha + hora)
-    let parsed = line.match(pattern1);
-    if (parsed) {
-      const [, dateStr, timeStr, homeTeam, awayTeam] = parsed;
-      const [day, month, year] = dateStr.split('/');
-      const dateTimeStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00-03:00`;
+                    if (currentDate) {
+                        const dateTimeStr = `${currentDate.year}-${currentDate.month}-${currentDate.day}T${timeStr}:00-03:00`;
+                        match = { eventId, homeTeam: homeTeam.trim(), awayTeam: awayTeam.trim(), dateTime: dateTimeStr };
+                    } else {
+                        const now = new Date();
+                        const year = now.getFullYear();
+                        const month = String(now.getMonth() + 1).padStart(2, '0');
+                        const day = String(now.getDate()).padStart(2, '0');
+                        const dateTimeStr = `${year}-${month}-${day}T${timeStr}:00-03:00`;
+                        match = { eventId, homeTeam: homeTeam.trim(), awayTeam: awayTeam.trim(), dateTime: dateTimeStr };
+                    }
+                }
+            }
+        }
 
-      match = {
-        eventId,
-        homeTeam: homeTeam.trim(),
-        awayTeam: awayTeam.trim(),
-        dateTime: dateTimeStr
-      };
-    } else {
-      // Intentar con formato solo hora
-      parsed = line.match(pattern2);
-      if (parsed) {
-        const [, timeStr, homeTeam, awayTeam] = parsed;
-        // Usar la fecha actual como base
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const dateTimeStr = `${year}-${month}-${day}T${timeStr}:00-03:00`;
-
-        match = {
-          eventId,
-          homeTeam: homeTeam.trim(),
-          awayTeam: awayTeam.trim(),
-          dateTime: dateTimeStr
-        };
-      }
+        if (match) {
+            matches.push(match);
+        } else if (!dateLineMatch) {
+            errors.push(`Línea ${i + 1}: "${line.substring(0, 50)}..." - Formato no reconocido`);
+        }
     }
 
-    if (match) {
-      matches.push(match);
-    } else {
-      errors.push(`Línea ${i + 1}: "${line}" - Formato no reconocido`);
-    }
-  }
-
-  return { matches, errors };
+    return { matches, errors };
 }
 
 // RUTA DE ADMIN: Carga masiva de partidos desde texto

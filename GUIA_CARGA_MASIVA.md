@@ -88,6 +88,29 @@ El sistema acepta los siguientes formatos de texto **Y JSON**:
 
 **Nota**: También puedes enviar un objeto JSON único (sin array) si solo quieres cargar un partido.
 
+### **Formato de Ligas Argentinas**
+
+#### Formato 8: Formato oficial de ligas argentinas
+```
+Jueves 22 de enero
+15:00 | Aldosivi vs. Defensa y Justicia (Interzonal) - Estadio José María Minella
+17:00 | Banfield vs. Huracán - Estadio Florencio Sola
+19:15 | Instituto vs. Vélez - Estadio Monumental Presidente Perón
+Viernes 23 de enero
+16:00 | San Lorenzo vs. Lanús - Nuevo Gasómetro
+17:00 | Independiente vs. Estudiantes (LP) - Estadio Libertadores de América
+Sábado 24 de enero
+15:00 | Barracas Central vs. River Plate
+20:00 | Rosario Central vs. Belgrano
+```
+
+**Características**:
+- ✅ Detecta fechas en español (Lunes, Martes, etc.)
+- ✅ Mantiene contexto de fecha entre partidos
+- ✅ Ignora información extra (estadios, tipo de partido)
+- ✅ Soporta separador pipe `|`
+- ✅ Limpia paréntesis y guiones automáticamente
+
 ## 🎯 Cómo Usar
 
 1. **Accede al Panel de Admin** → Pestaña "Carga Rápida"
