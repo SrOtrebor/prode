@@ -950,7 +950,138 @@ app.put('/api/admin/matches/:matchId', authMiddleware, adminAuthMiddleware, asyn
   }
 });
 
-// La ruta /api/admin/import-fixtures ha sido reemplazada por /api/admin/batch-load-matches
+// FUNCIÓN AUXILIAR: Parsear texto de partidos
+function parseMatchesFromText(rawText, eventId) {
+  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  const matches = [];
+  const errors = [];
+
+  // Patrones regex para diferentes formatos
+  // Formato 1: "DD/MM/YYYY HH:MM Equipo1 vs Equipo2"
+  // Formato 2: "DD/MM/YYYY HH:MM Equipo1 - Equipo2"
+  // Formato 3: "HH:MM Equipo1 vs Equipo2" (sin fecha, usa fecha actual)
+  // Formato 4: "HH:MM Equipo1 - Equipo2"
+  
+  const pattern1 = /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})\s+(.+?)\s+(?:vs|VS|-)\s+(.+)$/;
+  const pattern2 = /^(\d{1,2}:\d{2})\s+(.+?)\s+(?:vs|VS|-)\s+(.+)$/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let match = null;
+
+    // Intentar con formato completo (fecha + hora)
+    let parsed = line.match(pattern1);
+    if (parsed) {
+      const [, dateStr, timeStr, homeTeam, awayTeam] = parsed;
+      const [day, month, year] = dateStr.split('/');
+      const dateTimeStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00-03:00`;
+      
+      match = {
+        eventId,
+        homeTeam: homeTeam.trim(),
+        awayTeam: awayTeam.trim(),
+        dateTime: dateTimeStr
+      };
+    } else {
+      // Intentar con formato solo hora
+      parsed = line.match(pattern2);
+      if (parsed) {
+        const [, timeStr, homeTeam, awayTeam] = parsed;
+        // Usar la fecha actual como base
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const dateTimeStr = `${year}-${month}-${day}T${timeStr}:00-03:00`;
+        
+        match = {
+          eventId,
+          homeTeam: homeTeam.trim(),
+          awayTeam: awayTeam.trim(),
+          dateTime: dateTimeStr
+        };
+      }
+    }
+
+    if (match) {
+      matches.push(match);
+    } else {
+      errors.push(`Línea ${i + 1}: "${line}" - Formato no reconocido`);
+    }
+  }
+
+  return { matches, errors };
+}
+
+// RUTA DE ADMIN: Carga masiva de partidos desde texto
+app.post('/api/admin/batch-load-matches', authMiddleware, adminAuthMiddleware, async (req, res) => {
+  try {
+    const { rawText, eventId } = req.body;
+    
+    if (!rawText || !eventId) {
+      return res.status(400).json({ 
+        message: 'Se requiere el texto de partidos y el ID del evento.' 
+      });
+    }
+
+    // Verificar que el evento existe
+    const eventCheck = await pool.query('SELECT id, status FROM events WHERE id = $1', [eventId]);
+    if (eventCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'El evento no existe.' });
+    }
+
+    // Parsear el texto para extraer partidos
+    const { matches: matchesData, errors } = parseMatchesFromText(rawText, eventId);
+    
+    if (matchesData.length === 0) {
+      return res.status(400).json({ 
+        message: 'No se pudieron extraer partidos del texto proporcionado.',
+        error: errors.length > 0 ? errors.join('\n') : 'Formato de texto no reconocido'
+      });
+    }
+
+    // Insertar partidos en la base de datos
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      for (const match of matchesData) {
+        await client.query(
+          `INSERT INTO matches (event_id, local_team, visitor_team, match_datetime)
+           VALUES ($1, $2, $3, $4)`,
+          [match.eventId, match.homeTeam, match.awayTeam, match.dateTime]
+        );
+      }
+      
+      await client.query('COMMIT');
+      
+      let message = `Se cargaron ${matchesData.length} partidos correctamente.`;
+      if (errors.length > 0) {
+        message += ` (${errors.length} líneas no pudieron ser procesadas)`;
+      }
+      
+      res.status(201).json({ 
+        message,
+        loaded: matchesData.length,
+        errors: errors.length > 0 ? errors : undefined
+      });
+      
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Error en la carga por lotes:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ 
+      message: 'Error interno del servidor.', 
+      error: errorMessage 
+    });
+  }
+});
 
 
 // RUTA DE ADMIN: Generar una nueva llave de activación (con cantidad)
