@@ -458,6 +458,7 @@ app.get('/api/chat/messages', authMiddleware, async (req, res) => {
         SELECT cm.id, cm.message_content, cm.created_at, u.username, u.role 
         FROM chat_messages cm
         JOIN users u ON cm.user_id = u.id
+        WHERE cm.created_at > NOW() - INTERVAL '12 hours'
         ORDER BY cm.created_at DESC
         LIMIT 50
       `);
@@ -529,6 +530,23 @@ app.delete('/api/admin/chat/messages', authMiddleware, adminAuthMiddleware, asyn
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
+
+// Función para limpiar mensajes antiguos del chat (más de 12 horas)
+const cleanOldChatMessages = async () => {
+  try {
+    const result = await pool.query("DELETE FROM chat_messages WHERE created_at < NOW() - INTERVAL '12 hours'");
+    if (result.rowCount > 0) {
+      console.log(`[Chat Cleanup] Se eliminaron ${result.rowCount} mensajes antiguos.`);
+    }
+  } catch (error) {
+    console.error('[Chat Cleanup] Error al limpiar mensajes antiguos:', error);
+  }
+};
+
+// Ejecutar la limpieza cada 30 minutos
+setInterval(cleanOldChatMessages, 30 * 60 * 1000);
+// También ejecutar una vez al iniciar el servidor
+cleanOldChatMessages();
 
 // NUEVA RUTA: Solo para Admins
 app.get('/api/admin/test', authMiddleware, adminAuthMiddleware, (req, res) => {
