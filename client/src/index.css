@@ -7,3 +7,96 @@
     @apply bg-fondo-principal font-sans text-texto-principal;
   }
 }
+
+@layer utilities {
+
+  /* Gradientes personalizados */
+  .gradient-vip {
+    background: linear-gradient(135deg, #FFD700, #FFA500);
+  }
+
+  .gradient-free {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+  }
+
+  /* Glassmorphism */
+  .glass {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Remover fondo gris de imágenes PNG */
+  img[src*="landing/"] {
+    filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
+  }
+}
+
+/* Animaciones personalizadas */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes popcorn-fall {
+  0% {
+    transform: translateY(-100px) rotate(0deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(400px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 1s ease-out;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.popcorn-particle {
+  position: absolute;
+  top: -50px;
+  font-size: 24px;
+  animation: popcorn-fall 3s ease-in infinite;
+  pointer-events: none;
+}
+
+/* Scroll suave */
+html {
+  scroll-behavior: smooth;
+}
