@@ -1,5 +1,4 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const AuthContext = createContext(null);
@@ -7,7 +6,6 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
   const fetchAndSetUser = async () => {
     const token = localStorage.getItem('token');
@@ -37,7 +35,6 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
-    navigate('/'); // Redirigir a la landing
   };
 
   // La nueva función para refrescar los datos del usuario

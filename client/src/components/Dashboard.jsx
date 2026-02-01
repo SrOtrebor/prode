@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import EventDisplay from './EventDisplay';
 import Chat from './Chat';
@@ -158,6 +159,7 @@ const UsernameChanger = ({ profile }) => {
 // COMPONENTE PRINCIPAL
 function Dashboard() {
   const { user: authInfo, logout } = useAuth();
+  const navigate = useNavigate();
   const profile = authInfo?.user;
   const [activeEvent, setActiveEvent] = useState(null);
   const [currentLeaderboardData, setCurrentLeaderboardData] = useState(null);
@@ -165,6 +167,12 @@ function Dashboard() {
   const [unreadMessages, setUnreadMessages] = useState(0);
 
   const showRedeemer = profile;
+
+  // Función para manejar el logout y redirigir
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   // Socket.IO para detectar mensajes nuevos
   useEffect(() => {
@@ -239,7 +247,7 @@ function Dashboard() {
               <h1 className="font-display text-3xl font-bold">Cargando...</h1>
             </div>
           )}
-          <button onClick={logout} className={`${buttonStyle} bg-primario`}>
+          <button onClick={handleLogout} className={`${buttonStyle} bg-primario`}>
             Cerrar Sesión
           </button>
         </header>
