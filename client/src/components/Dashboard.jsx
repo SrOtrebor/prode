@@ -6,6 +6,7 @@ import AdminPanel from './AdminPanel';
 import Leaderboard from './Leaderboard';
 import PopcornBucket from './PopcornBucket';
 import WinnersMonitor from './WinnersMonitor';
+import { io } from 'socket.io-client';
 import axios from 'axios';
 
 // --- Estilos Base para Componentes ---
@@ -167,7 +168,6 @@ function Dashboard() {
 
   // Socket.IO para detectar mensajes nuevos
   useEffect(() => {
-    const { io } = require('socket.io-client');
     const socket = io(import.meta.env.VITE_API_URL);
 
     socket.on('new_message', (newMessage) => {
