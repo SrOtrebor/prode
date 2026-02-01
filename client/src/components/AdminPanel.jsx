@@ -86,7 +86,7 @@ const MatchManager = ({ events }) => {
   const [newMatchDatetime, setNewMatchDatetime] = useState('');
 
   // State for inline editing
-  const [editingMatch, setEditingMatch] = useState(null); 
+  const [editingMatch, setEditingMatch] = useState(null);
 
   useEffect(() => {
     if (events.length > 0 && !selectedEvent) {
@@ -100,8 +100,8 @@ const MatchManager = ({ events }) => {
       setLoading(true);
       const token = localStorage.getItem('token');
       try {
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/matches/${selectedEvent}`, { 
-          headers: { 'Authorization': `Bearer ${token}` } 
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/admin/matches/${selectedEvent}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
         setMatches(response.data);
       } catch (error) {
@@ -121,10 +121,10 @@ const MatchManager = ({ events }) => {
     }
     const token = localStorage.getItem('token');
     try {
-      const payload = { 
-        event_id: selectedEvent, 
-        local_team: newLocalTeam, 
-        visitor_team: newVisitorTeam, 
+      const payload = {
+        event_id: selectedEvent,
+        local_team: newLocalTeam,
+        visitor_team: newVisitorTeam,
         match_datetime: newMatchDatetime
       };
       await axios.post(`${import.meta.env.VITE_API_URL}/api/admin/matches`, payload, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -157,9 +157,9 @@ const MatchManager = ({ events }) => {
     if (!editingMatch) return;
     const token = localStorage.getItem('token');
     try {
-      const payload = { 
-        local_team: editingMatch.local_team, 
-        visitor_team: editingMatch.visitor_team, 
+      const payload = {
+        local_team: editingMatch.local_team,
+        visitor_team: editingMatch.visitor_team,
         match_datetime: editingMatch.match_datetime.substring(0, 16) // Formato para datetime-local
       };
       await axios.put(`${import.meta.env.VITE_API_URL}/api/admin/matches/${editingMatch.id}`, payload, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -388,30 +388,30 @@ const UserManager = ({ profile }) => {
   return (
     <div className="space-y-8">
       <div className="border-b border-texto-secundario/20 pb-6">
-        <button 
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className={`px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full ${showCreateForm ? 'bg-primario' : 'bg-confirmacion'}`}>
-            {showCreateForm ? 'Cancelar Creación' : 'Crear Nuevo Usuario'}
+        <button
+          onClick={() => setShowCreateForm(!showCreateForm)}
+          className={`px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full ${showCreateForm ? 'bg-primario' : 'bg-confirmacion'}`}>
+          {showCreateForm ? 'Cancelar Creación' : 'Crear Nuevo Usuario'}
         </button>
 
         {showCreateForm && (
-            <form onSubmit={handleCreateUser} className="space-y-4 mt-6">
-              <FormInput id="email" label="Correo Electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <FormInput id="username" label="Nombre de Usuario" type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
-              <FormInput id="password" label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              <div>
-                <label htmlFor="role-select" className="block text-sm font-bold text-texto-secundario mb-1">Rol</label>
-                <select id="role-select" value={role} onChange={(e) => setRole(e.target.value)} className={adminSelectStyle}>
-                  <option value="player">Player</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <button type="submit" className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full bg-primario">Confirmar Creación</button>
-              {createMessage.text && <p className={`mt-2 text-center text-sm ${createMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{createMessage.text}</p>}
-            </form>
+          <form onSubmit={handleCreateUser} className="space-y-4 mt-6">
+            <FormInput id="email" label="Correo Electrónico" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <FormInput id="username" label="Nombre de Usuario" type="text" value={username} onChange={(e) => setUsername(e.target.value)} />
+            <FormInput id="password" label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <div>
+              <label htmlFor="role-select" className="block text-sm font-bold text-texto-secundario mb-1">Rol</label>
+              <select id="role-select" value={role} onChange={(e) => setRole(e.target.value)} className={adminSelectStyle}>
+                <option value="player">Player</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button type="submit" className="px-4 py-2 rounded-md font-bold text-white uppercase transition-all hover:brightness-110 disabled:opacity-50 w-full bg-primario">Confirmar Creación</button>
+            {createMessage.text && <p className={`mt-2 text-center text-sm ${createMessage.type === 'success' ? 'text-confirmacion' : 'text-primario'}`}>{createMessage.text}</p>}
+          </form>
         )}
       </div>
-      
+
       <div>
         <h4 className="text-lg font-display font-semibold text-texto-principal mb-4">Gestionar Usuarios</h4>
         <div className="mb-4">
@@ -430,18 +430,30 @@ const UserManager = ({ profile }) => {
               <li key={user.id} className="bg-fondo-principal p-4 rounded-lg shadow-md">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                   <div className="md:col-span-2">
-                    <p className="font-bold text-texto-principal text-lg">{user.username}</p>
+                    <p className="font-bold text-texto-principal text-lg flex items-center gap-2">
+                      {user.username}
+                      {user.has_played && (
+                        <span title="Usuario Activo (Ha jugado)" className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-600 text-white uppercase">
+                          Jugó
+                        </span>
+                      )}
+                    </p>
                     <p className="text-sm text-texto-secundario">{user.email}</p>
-                    <div className="flex items-center mt-2">
+                    {user.last_login && (
+                      <p className="text-xs text-texto-secundario mt-1">
+                        Última conexión: {new Date(user.last_login).toLocaleString('es-AR')}
+                      </p>
+                    )}
+                    <div className="flex items-center mt-2 flex-wrap gap-2">
                       <span className={`px-2 py-1 text-xs font-bold rounded-full ${user.is_active ? 'bg-confirmacion text-white' : 'bg-primario text-white'}`}>
                         {user.is_active ? 'Activo' : 'Inactivo'}
                       </span>
                       {user.is_muted && (
-                        <span className="ml-2 px-2 py-1 text-xs font-bold rounded-full bg-yellow-500 text-black">
+                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-yellow-500 text-black">
                           Silenciado
                         </span>
                       )}
-                      <span className="ml-2 px-2 py-1 text-xs font-bold rounded-full bg-gray-600 text-white">
+                      <span className="px-2 py-1 text-xs font-bold rounded-full bg-gray-600 text-white">
                         {user.role}
                       </span>
                     </div>
@@ -557,16 +569,16 @@ function AdminPanel({ onLeaderboardUpdate }) {
 
   const handleDeleteEvent = async (eventId) => {
     if (!window.confirm('¿Estás seguro de que quieres eliminar este evento? Se borrarán todos sus partidos y predicciones. Esta acción es irreversible.')) {
-        return;
+      return;
     }
     const token = localStorage.getItem('token');
     try {
-        await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/events/${eventId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        fetchEvents();
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/admin/events/${eventId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      fetchEvents();
     } catch (error) {
-        console.error("Error al eliminar el evento", error);
+      console.error("Error al eliminar el evento", error);
     }
   };
 
