@@ -170,8 +170,12 @@ function Dashboard() {
 
   // Función para manejar el logout y redirigir
   const handleLogout = () => {
-    logout();
     navigate('/');
+    // Usamos setTimeout para asegurar que la navegación ocurra antes de limpiar el estado
+    // Esto evita que ProtectedRoute nos redirija al login
+    setTimeout(() => {
+      logout();
+    }, 100);
   };
 
   // Socket.IO para detectar mensajes nuevos
