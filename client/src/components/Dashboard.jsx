@@ -160,6 +160,7 @@ function Dashboard() {
   const profile = authInfo?.user;
   const [activeEvent, setActiveEvent] = useState(null);
   const [currentLeaderboardData, setCurrentLeaderboardData] = useState(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const showRedeemer = profile;
 
@@ -236,15 +237,52 @@ function Dashboard() {
           </div>
         </div>
 
-        <main className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-          <div className="lg:col-span-3 flex flex-col gap-8">
-            <EventDisplay setEvent={setActiveEvent} />
-            {activeEvent && <Leaderboard eventId={activeEvent.id} leaderboardData={currentLeaderboardData} />}
-          </div>
-          <div className="lg:col-span-2">
-            <Chat />
-          </div>
+        <main className="flex flex-col gap-8">
+          <EventDisplay setEvent={setActiveEvent} />
+          {activeEvent && <Leaderboard eventId={activeEvent.id} leaderboardData={currentLeaderboardData} />}
         </main>
+
+        {/* Botón flotante del chat */}
+        <button
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          className="fixed bottom-6 right-6 bg-secundario hover:bg-secundario/90 text-black font-bold p-4 rounded-full shadow-2xl transition-all hover:scale-110 z-40 flex items-center gap-2"
+          aria-label="Abrir chat"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          <span className="hidden sm:inline">Chat</span>
+        </button>
+
+        {/* Modal del chat */}
+        {isChatOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-fondo-principal rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col relative">
+              {/* Header del modal */}
+              <div className="flex items-center justify-between p-4 border-b border-texto-secundario/30">
+                <h3 className="text-xl font-bold text-texto-principal flex items-center gap-2">
+                  <svg className="w-6 h-6 text-secundario" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Chat en Vivo
+                </h3>
+                <button
+                  onClick={() => setIsChatOpen(false)}
+                  className="text-texto-secundario hover:text-texto-principal transition-colors p-2 hover:bg-tarjeta rounded-lg"
+                  aria-label="Cerrar chat"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Contenido del chat */}
+              <div className="flex-1 overflow-hidden">
+                <Chat />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
