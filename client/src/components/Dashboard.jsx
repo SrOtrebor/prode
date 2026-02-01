@@ -4,6 +4,8 @@ import EventDisplay from './EventDisplay';
 import Chat from './Chat';
 import AdminPanel from './AdminPanel';
 import Leaderboard from './Leaderboard';
+import PopcornBucket from './PopcornBucket';
+import WinnersMonitor from './WinnersMonitor';
 import axios from 'axios';
 
 // --- Estilos Base para Componentes ---
@@ -88,9 +90,9 @@ const BenefitUpgrader = ({ profile, activeEvent }) => {
       <div className="flex-grow flex items-center">
         <div className="w-full space-y-4">
           {canBecomeVip && (
-            <button 
-              onClick={() => handleSpendKey('become_vip', activeEvent.id)} 
-              disabled={loading || profile.key_balance < 1} 
+            <button
+              onClick={() => handleSpendKey('become_vip', activeEvent.id)}
+              disabled={loading || profile.key_balance < 1}
               className={`${buttonStyle} w-full bg-secundario text-black`}
             >
               Ser VIP para "{activeEvent.name}" (1 Llave)
@@ -100,7 +102,7 @@ const BenefitUpgrader = ({ profile, activeEvent }) => {
             <p className="text-center text-texto-secundario">Ya eres VIP para el evento actual.</p>
           )}
           {(!activeEvent || activeEvent.status !== 'open') && !isAlreadyVipForEvent && (
-             <p className="text-center text-texto-secundario">No hay un evento activo para el cual puedas volverte VIP.</p>
+            <p className="text-center text-texto-secundario">No hay un evento activo para el cual puedas volverte VIP.</p>
           )}
         </div>
       </div>
@@ -163,7 +165,7 @@ function Dashboard() {
 
   const RoleTag = ({ profile }) => {
     if (!profile?.role) return null;
-    
+
     const styles = {
       admin: 'bg-primario text-white',
       vip: 'bg-secundario text-black',
@@ -173,7 +175,7 @@ function Dashboard() {
     const vipCount = profile.vip_events?.length || 0;
 
     if (profile.role === 'admin') {
-        return <span className={`px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.admin}`}>Admin</span>;
+      return <span className={`px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.admin}`}>Admin</span>;
     }
 
     return (
@@ -181,8 +183,8 @@ function Dashboard() {
         <span className={`px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.player}`}>Player</span>
         {vipCount > 0 && (
           <span className={`ml-2 px-2 py-1 text-xs font-bold rounded-full uppercase ${styles.vip}`}>
-              VIP
-              <sup className="ml-0.5 font-bold">{vipCount}</sup>
+            VIP
+            <sup className="ml-0.5 font-bold">{vipCount}</sup>
           </span>
         )}
       </>
@@ -222,6 +224,16 @@ function Dashboard() {
           {showRedeemer && <KeyRedeemer />}
           {profile && <BenefitUpgrader profile={profile} activeEvent={activeEvent} />}
           {profile && <div className="md:col-span-2"><UsernameChanger profile={profile} /></div>}
+        </div>
+
+        {/* Balde de Pochoclos y Monitor de Ganadores */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <div className={cardStyle}>
+            <PopcornBucket />
+          </div>
+          <div className={cardStyle}>
+            <WinnersMonitor />
+          </div>
         </div>
 
         <main className="grid grid-cols-1 lg:grid-cols-5 gap-8">
