@@ -65,6 +65,34 @@ app.get('/', async (req, res) => {
   }
 });
 
+// --- MIGRACIÓN AUTOMÁTICA AL INICIO ---
+const ensureSchema = async () => {
+  try {
+    console.log('Verificando esquema de base de datos...');
+    const client = await pool.connect();
+
+    // Verificar y crear columna last_login
+    const res = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='users' AND column_name='last_login';
+    `);
+
+    if (res.rows.length === 0) {
+      console.log('Agregando columna last_login a tabla users...');
+      await client.query('ALTER TABLE users ADD COLUMN last_login TIMESTAMP WITH TIME ZONE DEFAULT NULL');
+      console.log('Columna last_login agregada exitosamente.');
+    }
+
+    client.release();
+  } catch (error) {
+    console.error('Error en migración automática:', error);
+  }
+};
+// Ejecutar migración sin bloquear el arranque (o esperando, mejor esperando un poco)
+ensureSchema();
+
+
 // Ruta para registrar nuevos usuarios
 app.post('/api/register', async (req, res) => {
   try {
