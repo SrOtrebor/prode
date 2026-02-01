@@ -607,7 +607,7 @@ app.get('/api/admin/users', authMiddleware, adminAuthMiddleware, async (req, res
     res.json(users.rows);
   } catch (error) {
     console.error('Error al obtener usuarios:', error);
-    res.status(500).json({ message: 'Error interno del servidor.' });
+    res.status(500).json({ message: 'Error interno del servidor: ' + error.message });
   }
 });
 
