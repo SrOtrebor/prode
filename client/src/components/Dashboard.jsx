@@ -161,8 +161,33 @@ function Dashboard() {
   const [activeEvent, setActiveEvent] = useState(null);
   const [currentLeaderboardData, setCurrentLeaderboardData] = useState(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   const showRedeemer = profile;
+
+  // Socket.IO para detectar mensajes nuevos
+  useEffect(() => {
+    const { io } = require('socket.io-client');
+    const socket = io(import.meta.env.VITE_API_URL);
+
+    socket.on('new_message', (newMessage) => {
+      // Solo contar como no leído si el chat está cerrado y no es mensaje propio
+      if (!isChatOpen && newMessage.username !== profile?.username) {
+        setUnreadMessages(prev => prev + 1);
+      }
+    });
+
+    return () => {
+      socket.off('new_message');
+      socket.disconnect();
+    };
+  }, [isChatOpen, profile?.username]);
+
+  // Resetear contador cuando se abre el chat
+  const handleOpenChat = () => {
+    setIsChatOpen(true);
+    setUnreadMessages(0);
+  };
 
   const RoleTag = ({ profile }) => {
     if (!profile?.role) return null;
@@ -244,10 +269,16 @@ function Dashboard() {
 
         {/* Botón flotante del chat */}
         <button
-          onClick={() => setIsChatOpen(!isChatOpen)}
-          className="fixed bottom-6 right-6 bg-secundario hover:bg-secundario/90 text-black font-bold p-4 rounded-full shadow-2xl transition-all hover:scale-110 z-40 flex items-center gap-2"
+          onClick={handleOpenChat}
+          className={`fixed bottom-6 right-6 bg-secundario hover:bg-secundario/90 text-black font-bold p-4 rounded-full shadow-2xl transition-all hover:scale-110 z-40 flex items-center gap-2 ${unreadMessages > 0 ? 'animate-pulse' : ''}`}
           aria-label="Abrir chat"
         >
+          {/* Badge de mensajes no leídos */}
+          {unreadMessages > 0 && (
+            <span className="absolute -top-2 -right-2 bg-primario text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-bounce">
+              {unreadMessages > 9 ? '9+' : unreadMessages}
+            </span>
+          )}
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
